@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>envlift · 环境搬迁</title>
+<!-- 内联空图标：避免浏览器去请求 /favicon.ico 产生一条 404；不引任何外部图标（D14）。 -->
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<a class="skip" href="#main">跳到主内容</a>
+
+<div class="shell">
+
+<aside class="side">
+  <div class="side-brand">
+    <span class="brand-name">ENVLIFT</span>
+  </div>
+
+  <!-- aria-orientation 由 app.js 按宽度同步：桌面竖排、窄屏横排。 -->
+  <nav class="tabs" role="tablist" aria-orientation="vertical" aria-label="主视图">
+    <button class="tab" role="tab" id="tab-scan" aria-controls="panel-scan" aria-selected="true" tabindex="0" type="button">
+      <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5A1.5 1.5 0 0 1 18.5 20H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16M3 12h18"/></svg>
+      <span>扫描</span>
+    </button>
+    <button class="tab" role="tab" id="tab-restore" aria-controls="panel-restore" aria-selected="false" tabindex="-1" type="button">
+      <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 4v10M8 10l4 4 4-4M4 16v2.5A1.5 1.5 0 0 0 5.5 20h13A1.5 1.5 0 0 0 20 18.5V16"/></svg>
+      <span>还原</span>
+    </button>
+    <button class="tab" role="tab" id="tab-path" aria-controls="panel-path" aria-selected="false" tabindex="-1" type="button">
+      <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 5.6v4.4a3 3 0 0 0 3 3h9M6 18.4V16"/><circle cx="6" cy="4" r="1.6"/><circle cx="6" cy="20" r="1.6"/><circle cx="19" cy="13" r="1.6"/></svg>
+      <span>PATH</span>
+    </button>
+    <button class="tab" role="tab" id="tab-report" aria-controls="panel-report" aria-selected="false" tabindex="-1" type="button">
+      <svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 16h6"/></svg>
+      <span>报告</span>
+    </button>
+  </nav>
+
+  <div class="side-card">
+    <div class="side-card-head">本机状态</div>
+    <dl class="facts" id="facts" aria-label="本机状态">
+      <div class="fact"><dt>状态</dt><dd id="fact-boot">连接中…</dd></div>
+    </dl>
+    <div class="side-card-foot">
+      <span class="badge" data-tone="idle" id="badge-elev">管理员运行未知</span>
+      <button class="btn btn-quiet btn-sm" id="btn-quit" type="button">退出</button>
+    </div>
+  </div>
+</aside>
+
+<main id="main">
+
+  <!-- 错误条放在内容区：吸顶时不遮挡侧栏导航。 -->
+  <div class="errbar" id="errbar" role="alert" aria-live="assertive" hidden>
+    <span class="errbar-code" id="errbar-code"></span>
+    <span class="errbar-msg" id="errbar-msg"></span>
+    <button class="btn btn-ghost btn-sm" id="errbar-retry" type="button">重试</button>
+    <button class="btn btn-ghost btn-sm" id="errbar-close" type="button" aria-label="关闭提示">关闭</button>
+    <span class="errbar-hint" id="errbar-hint"></span>
+  </div>
+
+  <!-- ============ 扫描 ============ -->
+  <section class="panel" id="panel-scan" role="tabpanel" aria-labelledby="tab-scan">
+    <header class="page-head">
+      <span class="page-index" aria-hidden="true">01</span>
+      <h1 class="page-title">扫描</h1>
+      <p class="lede">
+        扫描本机的注册表 PATH、语言运行时、三源合并后的软件清单。<br>
+        点击「写入配置」生成配置文件。
+      </p>
+    </header>
+
+    <div class="section">
+      <div class="section-head">
+        <h2>扫描</h2>
+        <span class="count" id="scan-progress-text"></span>
+        <div class="row-actions push-right">
+          <label class="field">
+            <input type="checkbox" id="scan-raw">
+            <span class="hint">保留真实用户名/主机名（--raw，导出文件不要进 git）</span>
+          </label>
+          <button class="btn" id="btn-scan" type="button">开始扫描</button>
+          <button class="btn btn-ghost" id="btn-scan-cancel" type="button" hidden>取消</button>
+        </div>
+      </div>
+      <div class="section-body">
+        <div class="scan-run" id="scan-run" hidden>
+          <ol class="rail" id="scan-rail"></ol>
+          <div>
+            <div class="progress"><i id="scan-bar"></i></div>
+            <div class="term">
+              <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i><span class="term-title">scan.log</span></div>
+              <div class="log" id="scan-log" role="log" aria-live="polite" aria-label="扫描日志"></div>
+            </div>
+            <div class="row-actions spaced">
+              <button class="btn btn-ghost btn-sm" id="btn-log-scroll" type="button" aria-pressed="true">自动滚到底：开</button>
+              <span class="hint" id="scan-state-note"></span>
+            </div>
+          </div>
+        </div>
+        <div class="empty" id="scan-idle">
+          <strong>未进行扫描</strong>
+          点击「开始扫描」，可随时取消。
+        </div>
+      </div>
+    </div>
+
+    <div id="scan-result" hidden></div>
+  </section>
+
+  <!-- ============ 还原 ============ -->
+  <section class="panel" id="panel-restore" role="tabpanel" aria-labelledby="tab-restore" hidden>
+    <header class="page-head">
+      <span class="page-index" aria-hidden="true">02</span>
+      <h1 class="page-title">还原</h1>
+      <p class="lede">
+        载入配置后生成还原计划。
+      </p>
+    </header>
+
+    <div class="section">
+      <div class="section-head">
+        <h2>配置与计划</h2>
+        <div class="row-actions push-right">
+          <label class="field">
+            <span class="hint">配置</span>
+            <input type="text" id="plan-config" value="envlift.yaml" spellcheck="false">
+          </label>
+          <button class="btn btn-ghost" id="btn-config-current" type="button">载入当前配置</button>
+          <button class="btn" id="btn-plan" type="button">生成计划</button>
+        </div>
+      </div>
+      <div class="section-body" id="plan-load-note">
+        <span class="hint">还没有载入配置。</span>
+      </div>
+    </div>
+
+    <div id="plan-result" hidden></div>
+  </section>
+
+  <!-- ============ PATH ============ -->
+  <section class="panel" id="panel-path" role="tabpanel" aria-labelledby="tab-path" hidden>
+    <header class="page-head">
+      <span class="page-index" aria-hidden="true">03</span>
+      <h1 class="page-title">PATH</h1>
+      <p class="lede">
+        PATH 改动可回滚。<br>
+        每项前的标记表示处理方式。
+      </p>
+    </header>
+
+    <div id="path-result" hidden></div>
+  </section>
+
+  <!-- ============ 报告 ============ -->
+  <section class="panel" id="panel-report" role="tabpanel" aria-labelledby="tab-report" hidden>
+    <header class="page-head">
+      <span class="page-index" aria-hidden="true">04</span>
+      <h1 class="page-title">报告</h1>
+      <p class="lede">
+        每次预演或执行的结果会呈现在此处。
+      </p>
+    </header>
+    <div id="report-result" hidden></div>
+  </section>
+
+</main>
+
+</div>
+
+<dialog id="dlg">
+  <form method="dialog" id="dlg-form">
+    <div class="dlg-head"><h2 id="dlg-title"></h2></div>
+    <div class="dlg-body" id="dlg-body"></div>
+    <div class="dlg-foot" id="dlg-foot"></div>
+  </form>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>

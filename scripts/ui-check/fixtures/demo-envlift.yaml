@@ -1,0 +1,84 @@
+# ③ 前端真机验证用配置：故意凑齐各种形态，让还原页每一列都有真实内容。
+#
+# 覆盖：winget 级 / 本地包级 / manual / 已存在 PATH / 失效 PATH / 待确认 PATH。
+# 所有用户名与主机名都是假的；路径均为虚构，不含真实用户目录。
+app: envlift
+schema: 1
+generated_at: '2026-10-27T12:40:00+08:00'
+
+source_machine:
+  os:
+    version: 'Windows 11'
+    build: '26300'
+    product_name: 'Windows 10 Home China'
+    display_version: '24H2'
+  arch: amd64
+  hostname: '${HOST}'
+  username: '${USER}'
+
+drive_map:
+  C:
+    label: 'System'
+    purpose: '系统盘'
+
+path:
+  user:
+    - value: 'C:\Users\${USER}\AppData\Local\Microsoft\WindowsApps'
+    - value: 'D:\Path\Git\cmd'
+    - value: 'D:\NotExist\bins'
+    - value: 'Z:\SDK\bin'
+  machine:
+    - value: 'C:\Windows\system32'
+      expand: true
+    - value: '%SystemRoot%\System32\Wbem'
+      expand: true
+
+runtimes:
+  - name: python
+    command: python
+    version: '3.14.8'
+    manager: conda
+    executable: 'D:\Conda\miniconda3\python.exe'
+    resolved_from: user
+    resolved_index: 0
+  - name: node
+    command: node
+    version: '22.22.2'
+    manager: fnm
+    executable: 'D:\nodejs\node.exe'
+
+software:
+  - name: 'Git'
+    version: '2.47.1'
+    winget_id: 'Git.Git'
+    sources: [registry, winget]
+    silent_capable: true
+  - name: 'Miniconda3 py314_26.9.3-0 (Python 3.14.8 64-bit)'
+    version: '26.9.3'
+    winget_id: 'Anaconda.Miniconda3'
+    sources: [registry, winget]
+    silent_capable: true
+  - name: 'Example Editor'
+    version: '1.90.0'
+    install_location: 'C:\Program Files\Example Editor'
+    sources: [registry]
+    silent_capable: false
+  - name: 'Example CAD Suite'
+    version: '30.8.2'
+    install_location: 'D:\Program Files\Example CAD Suite'
+    sources: [registry]
+    silent_capable: false
+    manual_hint: '需厂商账号登录后安装'
+
+installers:
+  - name: example-editor
+    aliases: ['Example Editor']
+    match: 'ExampleEditorSetup-*.exe'
+    silent_args: '/VERYSILENT /NORESTART'
+    silent_args_source: '示例配方：仅用于 GUI 验证表渲染，不真装'
+    needs_admin: true
+    verify:
+      command: 'example-editor --version'
+      expect_contains: 'Example Editor'
+    expect_reboot: false
+    source: user

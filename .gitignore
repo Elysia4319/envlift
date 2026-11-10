@@ -1,0 +1,67 @@
+# ---------------------------------------------------------------
+# envlift .gitignore
+# 技术栈尚未确定（CLI / Tauri / Electron / PowerShell 未拍板），
+# 因此这里只收录「与语言无关」的通用忽略项。
+# 形态确定后再按需追加对应语言的完整规则。
+# ---------------------------------------------------------------
+
+# --- Windows 系统垃圾文件 ---
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.lnk
+$RECYCLE.BIN/
+
+# --- 编辑器 / IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- 依赖与构建产物 ---
+node_modules/
+target/
+dist/
+build/
+# 构建出来的单文件可执行物：发布走 release，不进索引（技术栈已定为 Go）
+/envlift.exe
+*.exe
+
+# --- 日志 ---
+*.log
+
+# --- 环境变量与本地密钥 ---
+.env
+.env.*
+
+# --- envlift 运行时生成物 ---
+# 注意：envlift 的配置文件本身是「应纳入版本管理」的产物，
+# 这里只忽略扫描过程中的原始导出与临时转储。
+exports/
+tmp/
+
+# --- envlift 运行产物与本地数据 ---
+# reports/      还原报告（运行时生成）
+# installers/   本地安装包目录（二进制、体积大）
+# envlift.yaml  含已装软件清单等信息，不入库
+# *.raw.yaml    --raw 原样导出，含真实用户名/主机名，必须单独隔离：
+#               一旦 envlift.yaml 被 git add -f 进索引，后续 commit -a 会自动带上
+#               同名文件，若某次被 --raw 覆盖就会静默提交真实主机名。
+reports/
+installers/
+envlift.yaml
+*.raw.yaml
+# 配置备份含同样的软件清单与路径信息，一并忽略
+*.yaml.bak
+
+# ui-check 截图产物
+scripts/ui-check/shots/
+
+
+# ④ 决策文件：机器相关的选择，不是环境快照（D17）——不入库
+envlift.decisions.yaml
+envlift.decisions.yaml.tmp
+
+# 根目录下的扫描产物（含真实用户名/主机名/本机路径），只忽略仓库根层
+/envlift-*.yaml

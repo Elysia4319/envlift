@@ -1,0 +1,42 @@
+version: 2
+
+project_name: envlift
+
+before:
+  hooks:
+    - go mod verify
+
+builds:
+  - id: envlift
+    main: ./cmd/envlift
+    binary: envlift
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+    goarch:
+      - amd64
+    flags:
+      - -trimpath
+    ldflags:
+      - "-s -w -X main.version={{.Version}}"
+
+archives:
+  - id: default
+    formats:
+      - zip
+    name_template: "{{.ProjectName}}_{{.Version}}_{{.Os}}_{{.Arch}}"
+    files:
+      - README.md
+      - LICENSE
+      - docs/envlift.example.yaml
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"

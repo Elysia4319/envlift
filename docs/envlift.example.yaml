@@ -1,0 +1,98 @@
+# envlift 配置示例（schema v1）
+#
+# 本文件全部是假数据：用户名、主机名、盘符用途、软件名均为虚构，可安全提交入库。
+# 用途有两个：① schema 参考；② 测试用的 golden file。
+#
+# 生成自己的真实配置请运行：envlift scan
+# 注意：envlift.yaml 默认被 .gitignore 忽略（含已装软件清单等可推断单位/行业的信息）。
+#      --raw 导出的文件请务必用 *.raw.yaml 命名，该模式同样被忽略。
+
+app: envlift
+schema: 1
+generated_at: '2026-01-01T00:00:00+08:00'
+
+source_machine:
+  # version 按 build 号判定；product_name 是注册表原值，仅作参考（实测并不可靠）
+  os:
+    version: 'Windows 11'
+    build: '26100'
+    product_name: 'Windows 11 Pro'
+    display_version: '24H2'
+  arch: amd64
+  hostname: '${HOST}'
+  username: '${USER}'
+
+# 仅作还原判断的元信息，不承担脱敏职责（D5-R1）。
+# purpose 由人手工填写，scan 不会猜。
+drive_map:
+  C:
+    label: 'System'
+    purpose: ''
+  D:
+    label: 'Data'
+    purpose: ''
+
+# 保留注册表原始字面值，不展开 %VAR%（B1）。
+# expand: true 表示来源类型为 REG_EXPAND_SZ。
+path:
+  user:
+    - value: 'C:\Users\${USER}\AppData\Local\Microsoft\WindowsApps'
+    - value: '%USERPROFILE%\bin'
+      expand: true
+  machine:
+    - value: 'C:\Windows\system32'
+    - value: '%SystemRoot%\System32\Wbem'
+      expand: true
+    - value: 'C:\Program Files\Git\cmd'
+
+runtimes:
+  - name: python
+    command: python
+    version: '3.13.12'
+    manager: conda
+    executable: 'C:\Users\${USER}\miniconda3\python.exe'
+    # 可执行文件来自哪个 PATH 段、段内第几条，回答「为什么解析到这个」
+    resolved_from: user
+    resolved_index: 0
+  - name: node
+    command: node
+    version: '22.22.2'
+    manager: fnm
+    executable: 'C:\Users\${USER}\AppData\Roaming\fnm\node-versions\v22.22.2\installation\node.exe'
+  - name: java
+    command: java
+    version: null
+    manager: null
+    executable: null
+
+software:
+  - name: 'Example Editor'
+    version: '1.90.0'
+    install_location: 'C:\Program Files\Example Editor'
+    winget_id: 'Example.Editor'
+    sources: [registry, winget]
+    silent_capable: true
+    manual_hint: null
+  - name: 'Example CAD Suite'
+    version: '30.8.2'
+    install_location: 'D:\Program Files\Example CAD Suite'
+    winget_id: null
+    sources: [registry]
+    silent_capable: false
+    manual_hint: '需厂商账号登录后安装'
+
+installers:
+  - name: example-editor
+    winget_ids: ['Example.Editor']
+    aliases: ['Example Editor']
+    match_display: '(?i)^Example Editor'
+    match: 'ExampleEditorSetup-*.exe'
+    silent_args: '/VERYSILENT /NORESTART'
+    needs_admin: true
+    order: 10
+    verify:
+      command: 'example-editor --version'
+      expect_contains: 'Example Editor'
+    expect_reboot: false
+    source: builtin
+    verified_at: '2026-01-15'
