@@ -98,6 +98,10 @@ func TestWingetTierWhenAvailable(t *testing.T) {
 
 	p := mustBuild(t, testOptions(cfg, okTarget(), nil, nil))
 	it := p.Items[0]
+	// 未指定安装目录时，命令必须与既有格式逐字符一致。
+	if want := "winget install --id Git.Git --exact --silent --accept-package-agreements --accept-source-agreements"; it.Command != want {
+		t.Errorf("默认 winget 命令变化:\n got  %q\n want %q", it.Command, want)
+	}
 
 	if it.Tier != TierWinget {
 		t.Fatalf("层级 = %q，期望 winget", it.Tier)
@@ -140,6 +144,41 @@ func TestWingetTierCarriesRecipeVerify(t *testing.T) {
 	}
 	if it.RecipeSource != config.InstallerBuiltin {
 		t.Errorf("RecipeSource = %q", it.RecipeSource)
+	}
+}
+
+// 安装目录是否可指定只看配方是否显式声明模板，默认命令不因新增字段而改变。
+func TestInstallDirSupportedAndDefaultCommandsUnchanged(t *testing.T) {
+	cfg := baseConfig()
+	cfg.Software = []config.Software{
+		software("App", "1.0", ""),
+		software("Plain", "1.0", ""),
+	}
+	r := recipe("app", "Setup-*.exe", "/S")
+	r.Aliases = []string{"app"}
+	r.InstallDirArg = `/DIR="{install_dir}"`
+	plain := recipe("plain", "Plain-*.exe", "/S")
+	plain.Aliases = []string{"plain"}
+
+	target := okTarget()
+	target.WingetOK = false
+	p := mustBuild(t, testOptions(cfg, target, []string{"Setup-1.exe", "Plain-1.exe"},
+		[]config.Installer{r, plain}))
+	byName := map[string]Item{}
+	for _, it := range p.Items {
+		byName[it.Name] = it
+	}
+	if !byName["App"].InstallDirSupported {
+		t.Error("声明了 install_dir_arg 的配方应标记 supported")
+	}
+	if byName["Plain"].InstallDirSupported {
+		t.Error("未声明模板的配方不应标记 supported")
+	}
+	if want := `"C:\proj\installers\Plain-1.exe" /S`; byName["Plain"].Command != want {
+		t.Errorf("默认本地命令变化:\n got  %q\n want %q", byName["Plain"].Command, want)
+	}
+	if want := `"C:\proj\installers\Setup-1.exe" /S`; byName["App"].Command != want {
+		t.Errorf("未指定目录时命令不应变化:\n got  %q\n want %q", byName["App"].Command, want)
 	}
 }
 

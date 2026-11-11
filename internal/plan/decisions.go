@@ -45,6 +45,7 @@ const (
 	ActionOverrideRepresentative = "override_representative"
 	ActionSkip                   = "skip"
 	ActionMarkManual             = "mark_manual"
+	ActionSetLocation            = "set_location"
 	ActionAdd                    = "add"
 	ActionAccept                 = "accept"
 	ActionRewrite                = "rewrite"
@@ -80,11 +81,14 @@ type DecisionParams struct {
 	Recipe *string `yaml:"recipe,omitempty" json:"recipe,omitempty"`
 	// NewValue 给 path.rewrite 用：新的路径值。
 	NewValue *string `yaml:"new_value,omitempty" json:"new_value,omitempty"`
+	// InstallDir 给 set_location 用：用户选择的安装目录。
+	InstallDir *string `yaml:"install_dir,omitempty" json:"install_dir,omitempty"`
 }
 
 // Empty 报告 params 是否一个值都没有（nil 与空结构等价）。
 func (p *DecisionParams) Empty() bool {
-	return p == nil || (p.Version == nil && p.Installer == nil && p.Recipe == nil && p.NewValue == nil)
+	return p == nil || (p.Version == nil && p.Installer == nil && p.Recipe == nil &&
+		p.NewValue == nil && p.InstallDir == nil)
 }
 
 // Decision 是一条决策。
@@ -239,9 +243,56 @@ func (p *Plan) validateItemDecision(d Decision, it *Item, report func(code, form
 		}
 	case ActionSelect:
 		p.validateSelect(d, it, report)
+	case ActionSetLocation:
+		p.validateSetLocation(d, it, report)
 	default:
 		report(CodeInvalidDecisions, "未知 action=%q；%s 允许的动作：%s",
 			d.Action, it.Kind, strings.Join(allowedActions(it.Kind), ", "))
+	}
+}
+
+// validateSetLocation 校验「为某个软件指定安装目录」的决策。
+//
+// 只使用配方显式声明的模板：缺模板就拒绝，绝不猜测参数名。
+func (p *Plan) validateSetLocation(d Decision, it *Item, report func(code, format string, a ...any)) {
+	pr := d.Params
+	if pr == nil || pr.InstallDir == nil {
+		report(CodeInvalidDecisionParam, "action=set_location 必须带 params.install_dir")
+		return
+	}
+	if pr.Version != nil || pr.Installer != nil || pr.Recipe != nil || pr.NewValue != nil {
+		report(CodeInvalidDecisionParam, "action=set_location 只接受 params.install_dir")
+		return
+	}
+	dir := strings.TrimSpace(*pr.InstallDir)
+	if dir == "" {
+		report(CodeInvalidDecisionParam, "params.install_dir 不能为空")
+		return
+	}
+	if it.Status != StatusPlanned || (it.Tier != TierLocal && it.Tier != TierWinget) {
+		report(CodeInvalidDecisions, "只有 planned 且层级为 local 或 winget 的条目才能指定安装目录（当前 status=%s tier=%s）",
+			it.Status, it.Tier)
+		return
+	}
+	r := findRecipe(p.recipeInput, it.RecipeName)
+	if r == nil || (r.InstallDirArg == "" && r.WingetLocationArg == "") {
+		name := it.RecipeName
+		if name == "" {
+			name = it.Name
+		}
+		report(CodeInvalidDecisions, "配方 %s 未声明安装目录参数，不能指定目录", name)
+		return
+	}
+	if it.Tier == TierWinget && r.WingetLocationArg == "" {
+		report(CodeInvalidDecisions, "该包通过 winget 安装，但配方未声明 winget 安装目录参数")
+		return
+	}
+	if it.Tier == TierLocal && r.InstallDirArg == "" {
+		report(CodeInvalidDecisions, "该安装包不支持指定安装目录")
+		return
+	}
+	if reason := validateNewValue(dir, p.Target.Drives); reason != "" {
+		report(CodeInvalidDecisionParam, "%s", reason)
 	}
 }
 
@@ -464,6 +515,17 @@ func (p *Plan) applyItemDecision(i int, d Decision) {
 			}
 			it.Reason = "按决策选择安装包 " + file + "（④）"
 		}
+	case ActionSetLocation:
+		dir := strings.TrimSpace(*d.Params.InstallDir)
+		if r := p.locationResolvers[d.TargetID]; r != nil {
+			p.Items[i] = r(*it, dir)
+			it = &p.Items[i]
+		} else {
+			it.InstallDir = dir
+			it.InstallDirApplied = true
+		}
+		it.Decision = d.Action
+		it.Reason = "按决策指定安装目录 " + dir
 	}
 }
 
@@ -632,9 +694,9 @@ func (p *Plan) groupMembers(targetID string) []int {
 func allowedActions(kind string) []string {
 	switch kind {
 	case DecKindSoftware:
-		return []string{ActionSelect, ActionOverrideRepresentative, ActionSkip, ActionMarkManual}
+		return []string{ActionSelect, ActionOverrideRepresentative, ActionSkip, ActionMarkManual, ActionSetLocation}
 	case DecKindRuntime:
-		return []string{ActionSelect, ActionSkip, ActionMarkManual}
+		return []string{ActionSelect, ActionSkip, ActionMarkManual, ActionSetLocation}
 	case DecKindPath:
 		return []string{ActionAdd, ActionAccept, ActionRewrite, ActionSkip, ActionMarkInvalid}
 	}
@@ -710,6 +772,7 @@ func (p *Plan) recipeResolver(opts Options, byRecipe map[int][]string) func(Item
 		default:
 			out.Tier = TierLocal
 			fillLocal(&out, opts, candidate{recipeIdx: idx, file: files[0]})
+			out.InstallDirSupported = r.InstallDirArg != ""
 			out.Fallback = "失败即停止并保留已装部分（D11）"
 		}
 		return out

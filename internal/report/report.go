@@ -89,6 +89,12 @@ type ItemResult struct {
 	Reason string `json:"reason,omitempty"`
 	// ManualHint 是 manual 项可直接照做的人工步骤（下载/账号/选项）。
 	ManualHint string `json:"manual_hint,omitempty"`
+	// InstallDir / InstallDirApplied 记录 set_location 决策指定的安装目录。
+	InstallDir        string `json:"install_dir,omitempty"`
+	InstallDirApplied bool   `json:"install_dir_applied,omitempty"`
+	// VerifyCommandPresent 只表示配方声明了 verify；风险提示需要它，
+	// 但完整 verify 命令属于计划内部细节，不写进报告。
+	VerifyCommandPresent bool `json:"verify_command_present,omitempty"`
 }
 
 // PathResult 是报告里的一条 PATH 变更。
@@ -241,19 +247,22 @@ func buildItems(p *plan.Plan, steps []apply.Step) []ItemResult {
 	out := make([]ItemResult, 0, len(p.Items))
 	for i, it := range p.Items {
 		r := ItemResult{
-			TargetID:        it.TargetID,
-			Kind:            it.Kind,
-			Name:            it.Name,
-			ExpectedVersion: it.Expected,
-			BeforeVersion:   it.Current,
-			Tier:            it.Tier,
-			Status:          it.Status,
-			Command:         it.Command,
-			NeedsAdmin:      it.NeedsAdmin,
-			ExpectReboot:    it.ExpectReboot,
-			Decision:        it.Decision,
-			Reason:          it.Reason,
-			ManualHint:      it.ManualHint,
+			TargetID:             it.TargetID,
+			Kind:                 it.Kind,
+			Name:                 it.Name,
+			ExpectedVersion:      it.Expected,
+			BeforeVersion:        it.Current,
+			Tier:                 it.Tier,
+			Status:               it.Status,
+			Command:              it.Command,
+			NeedsAdmin:           it.NeedsAdmin,
+			ExpectReboot:         it.ExpectReboot,
+			Decision:             it.Decision,
+			Reason:               it.Reason,
+			ManualHint:           it.ManualHint,
+			InstallDir:           it.InstallDir,
+			InstallDirApplied:    it.InstallDirApplied,
+			VerifyCommandPresent: it.VerifyCmd != "",
 		}
 		if s, ok := byKey[strconv.Itoa(i)+"|"+it.Kind]; ok {
 			code := s.ExitCode

@@ -69,8 +69,8 @@ func RenderMarkdown(d *Document) string {
 	}
 
 	b.WriteString("\n## 2. 逐项结果\n\n")
-	b.WriteString("| # | 类型 | 名称 | 期望 | 执行前 | 执行后 | 层级 | 状态 | 退出码 | 校验 | 说明 |\n")
-	b.WriteString("|---|---|---|---|---|---|---|---|---|---|---|\n")
+	b.WriteString("| # | 类型 | 名称 | 期望 | 执行前 | 执行后 | 层级 | 安装目录 | 状态 | 退出码 | 校验 | 说明 |\n")
+	b.WriteString("|---|---|---|---|---|---|---|---|---|---|---|---|\n")
 	for i, it := range d.Items {
 		exit := "-"
 		if it.ExitCode != nil {
@@ -87,12 +87,12 @@ func RenderMarkdown(d *Document) string {
 		if it.VersionUnparsed {
 			after = "解析失败"
 		}
-		fmt.Fprintf(&b, "| %d | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n",
+		fmt.Fprintf(&b, "| %d | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n",
 			i+1, it.Kind, esc(it.Name), orDash(it.ExpectedVersion), orDash(it.BeforeVersion), after,
-			orDash(it.Tier), it.Status, exit, orDash(it.VerifyResult), esc(note))
+			orDash(it.Tier), orDash(it.InstallDir), it.Status, exit, orDash(it.VerifyResult), esc(note))
 	}
 	if len(d.Items) == 0 {
-		b.WriteString("| - | - | （没有软件/运行时条目） | | | | | | | | |\n")
+		b.WriteString("| - | - | （没有软件/运行时条目） | | | | | | | | | |\n")
 	}
 
 	b.WriteString("\n## 3. PATH 变更\n\n")
@@ -141,6 +141,10 @@ func RenderMarkdown(d *Document) string {
 		}
 		if it.ExpectReboot {
 			fmt.Fprintf(&b, "- %s：完成后需重启\n", it.Name)
+			risks++
+		}
+		if it.InstallDirApplied && it.VerifyCommandPresent {
+			fmt.Fprintf(&b, "- %s 指定了安装目录，verify 命令可能仍指向旧路径，请在 VM 上确认\n", it.Name)
 			risks++
 		}
 	}

@@ -116,6 +116,7 @@ func DetectRaw(cfg *config.Config) bool { return !config.HasPlaceholders(cfg) }
 type FallbackPlan struct {
 	Tier          string `json:"tier"`
 	Command       string `json:"command"`
+	InstallDir    string `json:"install_dir,omitempty"`
 	NeedsAdmin    bool   `json:"needs_admin"`
 	ExpectReboot  bool   `json:"expect_reboot"`
 	VerifyCmd     string `json:"verify_command,omitempty"`
@@ -165,6 +166,12 @@ type Item struct {
 	// 正则匹配错了极难排查，没有这个字段等于放弃调试。
 	MatchedBy     string `json:"matched_by"`
 	InstallerFile string `json:"installer_file,omitempty"`
+	// InstallDir / InstallDirApplied 是用户通过 set_location 决策指定的安装目录。
+	// 它们不进 target_id（D23）：身份仍由软件本身决定，目录只是本次执行参数。
+	InstallDir        string `json:"install_dir,omitempty"`
+	InstallDirApplied bool   `json:"install_dir_applied,omitempty"`
+	// InstallDirSupported 表示该条目命中的配方是否声明了安装目录模板。
+	InstallDirSupported bool `json:"install_dir_supported,omitempty"`
 	// 以下三个字段供去重选代表与报告展示（A2）。
 	Hive     string `json:"hive,omitempty"`
 	ArchView string `json:"arch_view,omitempty"`
@@ -234,6 +241,10 @@ type Plan struct {
 	resolvers       map[string]func(Item, string) Item
 	// recipeResolvers 是「只用某个配方重算条目」的构造函数（A2 的 select{recipe}）。
 	recipeResolvers map[string]func(Item, string) Item
+	// locationResolvers 按「条目 + 安装目录」重算命令；决策落盘时使用。
+	locationResolvers map[string]func(Item, string) Item
+	// recipeInput 是构建时的配方表，校验 set_location 时用来查模板。
+	recipeInput []config.Installer
 }
 
 // IsBlocked 报告计划是否因硬错误不可执行。
@@ -282,11 +293,13 @@ func Build(opts Options) (*Plan, error) {
 		GeneratedAt: now.Format(time.RFC3339),
 		Target:      opts.Target,
 		// C8：是否 --raw 由调用方在代入变量前判定后传入。
-		RawConfig:       opts.RawConfig,
-		baseByID:        map[string]Item{},
-		excludedTargets: excludedIDSet(cfg),
-		resolvers:       map[string]func(Item, string) Item{},
-		recipeResolvers: map[string]func(Item, string) Item{},
+		RawConfig:         opts.RawConfig,
+		baseByID:          map[string]Item{},
+		excludedTargets:   excludedIDSet(cfg),
+		resolvers:         map[string]func(Item, string) Item{},
+		recipeResolvers:   map[string]func(Item, string) Item{},
+		locationResolvers: map[string]func(Item, string) Item{},
+		recipeInput:       opts.Recipes,
 	}
 
 	byRecipe := matchInstallerFiles(opts.Recipes, opts.InstallerFiles)
@@ -545,9 +558,7 @@ func buildSoftwareItems(cfg *config.Config, opts Options, m *match.Matcher, byRe
 			// winget 安装器多为机器级安装，保守标记为需要提权。
 			// 不标的话 C-2 的 admin_confirmed 就形同虚设——实测就是这么绕过去的。
 			it.NeedsAdmin = true
-			it.Command = fmt.Sprintf(
-				"winget install --id %s --exact --silent --accept-package-agreements --accept-source-agreements",
-				*sw.WingetID)
+			it.Command = buildWingetCommand(*sw.WingetID, "")
 			// 配方命中时，verify / expect_reboot 与安装层级无关：winget 装完也要
 			// 用同一套校验判断是否已完成，否则重跑会再次执行安装并因「已安装」失败。
 			if idx >= 0 {
@@ -562,6 +573,8 @@ func buildSoftwareItems(cfg *config.Config, opts Options, m *match.Matcher, byRe
 				}
 				it.ExpectReboot = r.ExpectReboot
 			}
+			it.InstallDirSupported = idx >= 0 &&
+				(opts.Recipes[idx].InstallDirArg != "" || opts.Recipes[idx].WingetLocationArg != "")
 			if hasLocal {
 				fb := it
 				fb.Tier = TierLocal
@@ -572,6 +585,7 @@ func buildSoftwareItems(cfg *config.Config, opts Options, m *match.Matcher, byRe
 				it.FallbackPlan = &FallbackPlan{
 					Tier:          fb.Tier,
 					Command:       fb.Command,
+					InstallDir:    fb.InstallDir,
 					NeedsAdmin:    fb.NeedsAdmin,
 					ExpectReboot:  fb.ExpectReboot,
 					VerifyCmd:     fb.VerifyCmd,
@@ -583,6 +597,20 @@ func buildSoftwareItems(cfg *config.Config, opts Options, m *match.Matcher, byRe
 				it.Fallback = "失败后降级到本地包 " + cand.file
 			} else {
 				it.Fallback = "失败后标 manual（installers/ 中无匹配安装包）"
+			}
+			p.locationResolvers[it.TargetID] = func(old Item, dir string) Item {
+				out := old
+				r := opts.Recipes[idx]
+				out.InstallDir = dir
+				out.InstallDirApplied = dir != ""
+				out.Command = buildWingetCommand(*sw.WingetID, applyInstallDir(r.WingetLocationArg, dir))
+				if out.FallbackPlan != nil {
+					fb := *out.FallbackPlan
+					fb.InstallDir = dir
+					fb.Command = localCommandWithDir(opts, cand, dir)
+					out.FallbackPlan = &fb
+				}
+				return out
 			}
 
 		case hasLocal && len(cand.extraFiles) > 0:
@@ -597,7 +625,9 @@ func buildSoftwareItems(cfg *config.Config, opts Options, m *match.Matcher, byRe
 		case hasLocal:
 			it.Tier = TierLocal
 			fillLocal(&it, opts, cand)
+			it.InstallDirSupported = opts.Recipes[idx].InstallDirArg != ""
 			it.Fallback = "失败即停止并保留已装部分（D11）"
+			p.locationResolvers[it.TargetID] = localLocationResolver(opts, cand)
 			if sw.WingetID != nil {
 				it.Reason = wingetSkipReason(opts)
 			}
@@ -685,7 +715,9 @@ func buildRuntimeItems(cfg *config.Config, opts Options, m *match.Matcher, byRec
 		case hasLocal:
 			it.Tier = TierLocal
 			fillLocal(&it, opts, cand)
+			it.InstallDirSupported = opts.Recipes[idx].InstallDirArg != ""
 			it.Fallback = "失败即停止并保留已装部分（D11）"
+			p.locationResolvers[it.TargetID] = localLocationResolver(opts, cand)
 		case idx >= 0:
 			it.Tier = TierManual
 			it.Status = StatusManual
@@ -725,6 +757,7 @@ func installerResolver(opts Options, recipeIdx int) func(Item, string) Item {
 		out.Fallback = "失败即停止并保留已装部分（D11）"
 		out.Candidates = nil
 		out.CandidateKind = ""
+		out.InstallDirSupported = opts.Recipes[recipeIdx].InstallDirArg != ""
 		return out
 	}
 }
@@ -737,11 +770,42 @@ func describeCandidates(all []match.Candidate) string {
 	return strings.Join(parts, ", ")
 }
 
+// applyInstallDir 把模板里的 {install_dir} 替换为实际目录；空模板返回空串。
+func applyInstallDir(template, dir string) string {
+	if template == "" || dir == "" {
+		return ""
+	}
+	return strings.ReplaceAll(template, "{install_dir}", dir)
+}
+
+// buildWingetCommand 生成 winget 安装命令；extraArgs 为空时保持原有默认格式。
+func buildWingetCommand(wingetID, extraArgs string) string {
+	cmd := fmt.Sprintf(
+		"winget install --id %s --exact --silent --accept-package-agreements --accept-source-agreements",
+		wingetID)
+	if extraArgs != "" {
+		cmd += " " + extraArgs
+	}
+	return cmd
+}
+
 func fillLocal(it *Item, opts Options, c candidate) {
+	fillLocalWithDir(it, opts, c, "")
+}
+
+func fillLocalWithDir(it *Item, opts Options, c candidate, dir string) {
 	r := opts.Recipes[c.recipeIdx]
 	path := filepath.Join(opts.InstallerDir, c.file)
+	args := r.SilentArgs
+	if extra := applyInstallDir(r.InstallDirArg, dir); extra != "" {
+		args = strings.TrimSpace(args + " " + extra)
+	}
 	// C7：展示与执行的都是代入变量后的最终命令，不留占位符。
-	it.Command = opts.Expand(fmt.Sprintf(`"%s" %s`, path, r.SilentArgs))
+	it.Command = opts.Expand(fmt.Sprintf(`"%s" %s`, path, args))
+	it.InstallDir = dir
+	if dir != "" {
+		it.InstallDirApplied = true
+	}
 	it.NeedsAdmin = r.NeedsAdmin
 	it.ExpectReboot = r.ExpectReboot
 	it.RecipeName = r.Name
@@ -753,6 +817,28 @@ func fillLocal(it *Item, opts Options, c candidate) {
 	if r.Verify != nil {
 		it.VerifyCmd = opts.Expand(r.Verify.Command)
 		it.VerifyExpect = r.Verify.ExpectContains
+	}
+}
+
+// localCommandWithDir 返回本地安装包在指定目录下的命令，供 winget 降级方案复用。
+func localCommandWithDir(opts Options, c candidate, dir string) string {
+	r := opts.Recipes[c.recipeIdx]
+	path := filepath.Join(opts.InstallerDir, c.file)
+	args := r.SilentArgs
+	if extra := applyInstallDir(r.InstallDirArg, dir); extra != "" {
+		args = strings.TrimSpace(args + " " + extra)
+	}
+	return opts.Expand(fmt.Sprintf(`"%s" %s`, path, args))
+}
+
+// localLocationResolver 返回「本地包条目 + 安装目录」的命令重算闭包。
+func localLocationResolver(opts Options, c candidate) func(Item, string) Item {
+	return func(old Item, dir string) Item {
+		out := old
+		out.InstallDir = dir
+		out.InstallDirApplied = dir != ""
+		out.Command = localCommandWithDir(opts, c, dir)
+		return out
 	}
 }
 
