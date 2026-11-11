@@ -148,10 +148,15 @@ type Installer struct {
 	NeedsAdmin       bool     `yaml:"needs_admin" json:"needs_admin"`
 	Order            int      `yaml:"order,omitempty" json:"order,omitempty"`
 	DependsOn        []string `yaml:"depends_on,omitempty" json:"depends_on,omitempty"`
-	Verify           *Verify  `yaml:"verify,omitempty" json:"verify,omitempty"`
-	ExpectReboot     bool     `yaml:"expect_reboot" json:"expect_reboot"`
-	Source           string   `yaml:"source" json:"source"`
-	VerifiedAt       *string  `yaml:"verified_at,omitempty" json:"verified_at,omitempty"`
+	// InstallDirArg / WingetLocationArg 是「用户指定安装目录」的显式模板。
+	// 模板中用 {install_dir} 表示用户选择的目录；空表示该配方不支持指定目录。
+	// 前者追加到本地安装包命令，后者追加到 winget 命令；两者可同时声明。
+	InstallDirArg     string  `yaml:"install_dir_arg,omitempty" json:"install_dir_arg,omitempty"`
+	WingetLocationArg string  `yaml:"winget_location_arg,omitempty" json:"winget_location_arg,omitempty"`
+	Verify            *Verify `yaml:"verify,omitempty" json:"verify,omitempty"`
+	ExpectReboot      bool    `yaml:"expect_reboot" json:"expect_reboot"`
+	Source            string  `yaml:"source" json:"source"`
+	VerifiedAt        *string `yaml:"verified_at,omitempty" json:"verified_at,omitempty"`
 }
 
 // Verify 描述「如何判断该软件已经装好」，用于 restore 幂等判断（D13-P1/P3）。
@@ -205,8 +210,36 @@ func (c *Config) validate() error {
 			return fmt.Errorf("installers[%d](%s).source 取值无效: %q，应为 builtin 或 user",
 				i, ins.Name, ins.Source)
 		}
+		if err := validateInstallDirTemplate(ins.InstallDirArg); err != "" {
+			return fmt.Errorf("installers[%d](%s).install_dir_arg %s", i, ins.Name, err)
+		}
+		if err := validateInstallDirTemplate(ins.WingetLocationArg); err != "" {
+			return fmt.Errorf("installers[%d](%s).winget_location_arg %s", i, ins.Name, err)
+		}
 	}
 	return nil
+}
+
+// validateInstallDirTemplate 校验安装目录模板，返回空串表示合法。
+//
+// 模板会直接拼进命令行，所以控制字符、未配对引号必须在加载配置时就拒绝；
+// {install_dir} 出现多次会让「替换一次」的语义变得不确定，也一并拒绝。
+func validateInstallDirTemplate(tpl string) string {
+	if tpl == "" {
+		return ""
+	}
+	if strings.Count(tpl, "{install_dir}") > 1 {
+		return "中的 {install_dir} 只能出现一次"
+	}
+	for _, r := range tpl {
+		if r == '\n' || r == '\r' || r < 0x20 || r == 0x7f {
+			return "不得含换行或控制字符"
+		}
+	}
+	if strings.Count(tpl, `"`)%2 != 0 {
+		return "不得含未配对的双引号"
+	}
+	return ""
 }
 
 // StringPtr 返回 s 的指针，用于表达 schema 中的可空字符串字段。
