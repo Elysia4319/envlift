@@ -131,6 +131,17 @@ func TestFrontendDoesNotBuildCommands(t *testing.T) {
 	}
 }
 
+// 安装目录输入必须存在，且只走已有决策接口，不引入外链。
+func TestDecisionInstallDirControls(t *testing.T) {
+	js := staticFiles(t)["app.js"]
+	for _, want := range []string{"dec-installdir", "dec-apply-dir",
+		"action: 'set_location'", "install_dir"} {
+		if !strings.Contains(js, want) {
+			t.Errorf("app.js 缺少安装目录控件或参数: %q", want)
+		}
+	}
+}
+
 func TestEmbedAssetsServedWithCorrectType(t *testing.T) {
 	s := newTestServer(t)
 	cases := []struct{ path, wantPrefix string }{

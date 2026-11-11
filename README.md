@@ -93,6 +93,7 @@ go install github.com/Elysia4319/envlift/cmd/envlift@latest
 - F6 的真实重启续跑尚未执行；状态机与幂等跳过已验证。
 - F8「缺 winget」是模拟场景，未真实卸载 App Installer。
 - 不要同时开两个实例；MVP 未做单实例检测。
+- 安装目录仅对配方显式声明参数的包生效；winget 包需配方支持 --location。
 - 这是 early alpha，接口、配置格式和 GUI 仍可能变化。
 
 ## 文档入口

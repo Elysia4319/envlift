@@ -924,6 +924,14 @@
         + '</select></label>';
     }
 
+    var dirOk = (it.tier === 'local' || it.tier === 'winget') && it.install_dir_supported;
+    html += '<label class="field"><span class="hint">安装目录</span>'
+      + '<input class="dec-installdir" type="text" spellcheck="false" placeholder="安装目录，如 D:\\Apps\\Git"'
+      + (dirOk ? '' : ' disabled') + ' aria-label="安装目录"></label>'
+      + '<button class="btn btn-ghost btn-sm dec-apply-dir" type="button"'
+      + (dirOk ? '' : ' disabled') + '>指定目录</button>'
+      + (dirOk ? '' : '<span class="hint">该配方不支持指定安装目录</span>');
+
     html += '<button class="btn btn-ghost btn-sm dec-act" data-action="skip" type="button">跳过</button>'
       + '<button class="btn btn-ghost btn-sm dec-act" data-action="mark_manual" type="button">转人工</button>'
       + '</div>';
@@ -1012,6 +1020,22 @@
           else if (it && it.candidate_kind === 'recipe') { params.recipe = pick.value; }
           else { params.version = pick.value; }
           var d = { target_id: id, kind: kind, action: 'select', params: params };
+          if (it) { d.name = it.name; d.version = it.expected_version || ''; }
+          putDecision(d);
+        });
+      }
+
+      var dirInput = ctl.querySelector('.dec-installdir');
+      var dirApply = ctl.querySelector('.dec-apply-dir');
+      if (dirApply) {
+        dirApply.addEventListener('click', function () {
+          var v = (dirInput && dirInput.value || '').trim();
+          if (!v) {
+            showError({ code: 'invalid_decision_params', message: '安装目录不能为空' }, null);
+            return;
+          }
+          var it = itemOf();
+          var d = { target_id: id, kind: kind, action: 'set_location', params: { install_dir: v } };
           if (it) { d.name = it.name; d.version = it.expected_version || ''; }
           putDecision(d);
         });

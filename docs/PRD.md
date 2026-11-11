@@ -491,6 +491,8 @@ envlift\
 | `winget_ids` | []string | **最强锚点**（M1）。winget id 规范化、稳定、不带版本与厂商噪声 |
 | `aliases` | []string | 规范化后精确匹配的别名 |
 | `match_display` | string | 对 DisplayName 的 Go RE2 正则，建议带 `(?i)` 并锚定 |
+| `install_dir_arg` | string | 本地安装包追加的目录参数模板，`{install_dir}` 表示用户选择的目录；空表示不支持 |
+| `winget_location_arg` | string | winget 追加的目录参数模板（如 `--location "{install_dir}"`）；空表示不支持 |
 
 ### 10.3 四级锚点（M2）
 
@@ -504,6 +506,16 @@ envlift\
 配方的 `name` 只作条目标识，**不参与 DisplayName 匹配**——两件事分开，避免「配方改名就匹配不上」。
 
 命中依据写入计划的 `matched_by`（`winget_id` / `alias` / `display_regex` / `name` / `none`），这是 M5 要求的可审计字段。
+
+### 10.2.1 `set_location` 决策
+
+对 `planned` 且层级为 `local` / `winget` 的条目，可用决策
+`{action: "set_location", params: {install_dir: "D:\\Apps\\Git"}}` 指定安装目录。
+
+- 只使用配方显式声明的模板，不猜参数；两个模板都为空时拒绝。
+- `winget` 条目要求 `winget_location_arg` 非空；`local` 条目要求 `install_dir_arg` 非空。
+- `install_dir` 与 `path.rewrite` 共用路径校验：必须是盘符开头的绝对路径或 UNC，盘符必须存在。
+- 安装目录只是决策参数，不进入 `target_id`（D23）；不设置时计划与命令保持原样。
 
 ### 10.4 规范化（M3）
 
