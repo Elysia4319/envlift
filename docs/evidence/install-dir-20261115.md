@@ -56,8 +56,8 @@ go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=0.1.0-alpha" 
 | 2. 同目录第二次 apply | 通过（alpha） | `status=skipped`、`Reinstall=false`、未执行安装命令、账本保留 | verify `C:\Apps\7zip\7z.exe` 通过 |
 | 3. 改目录第三次 apply | 通过（alpha） | 命令 `/D=C:\Apps\7zip2`；报告 verified=true；账本 `actual_dir=C:\Apps\7zip2\` | 同 target_id 账本更新 |
 | 4. expect_reboot | 通过（alpha） | 第一次停在“完成后需要重启”，exit 2 并写账本；重启后第二次 `skipped` | 无害 noop 安装器 |
-| 5. winget 包 | 部分通过（环境网络） | 命令含 `--location "C:\Apps\7zip-winget" --force`；直接 winget 安装成功且注册表落点为请求目录 | envlift apply 复跑两次均因 winget 源连接错误失败；旧二进制历史结果为 unverified |
-| 6. 降级目录丢失 | 历史通过（旧二进制，非最终） | `fallback_plan=null`；`fallback=指定目录时不可降级...`；无 `[降级]`；标记文件 `MARKER=NO` | 未用 alpha 复跑 |
+| 5. winget 包 | 通过（alpha，版本漂移 unverified） | 命令含 `--location "C:\Apps\7zip-winget" --force`；apply 完成；注册表落点为请求目录 | 报告 unverified；winget 装 26.06、配置 25.01 |
+| 6. 降级目录丢失 | 通过（alpha） | `fallback_plan=null`；`fallback=指定目录时不可降级...`；无 `[降级]`；标记文件 `MARKER=NO` | 不会装到默认目录 |
 | 7. 账本与实际不符 | 历史通过（旧二进制，非最终） | 篡改注册表后打印“账本记录与实际不符，重新安装”并执行安装；账本 `actual_dir` 更新 | 未用 alpha 复跑 |
 | 8. InstallLocation 读取失败 | 历史通过（旧二进制，非最终） | 拒绝读取假卸载键后未按账本跳过，执行安装并标 `unverified` | 读取错误被折叠为“未找到” |
 | 9. 候选去重 | 历史通过（旧二进制，非最终） | 同路径重复键 -> 去重为 1 并 `skipped`；不同路径 -> `未验证（同名候选：...）` | 未用 alpha 复跑 |
@@ -66,7 +66,7 @@ go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=0.1.0-alpha" 
 | 12. 回滚限制 | 部分通过（旧二进制，非最终） | 安装目录-only journal 无 PATH 快照，rollback 报错；7-Zip 仍安装 | PATH 回滚沿用 2026-11-03 F7 结果，本轮未重跑 |
 | 13. 重装失败报告 | 通过（alpha） | `fail-setup.exe` 退出 1；报告 `status=failed`、`failure_reason=simulated installer failure: exit 1`；无账本 | 未出现 `succeeded` |
 
-最终 alpha 验收通过项仅限场景 1–4 与 13；场景 5 部分通过；场景 6–10 为旧二进制历史结果；
+最终 alpha 验收通过项为场景 1–6 与 13；场景 7–10 为旧二进制历史结果；
 场景 11 未验证；场景 12 部分通过。
 
 ## 关键输出
@@ -158,30 +158,45 @@ alpha 二进制 dry-run 命令：
 命令 winget install --id 7zip.7zip --exact --silent --accept-package-agreements --accept-source-agreements --location "C:\Apps\7zip-winget" --force
 ```
 
-alpha 二进制 envlift apply 复跑两次均失败：
+alpha 二进制 envlift apply 成功完成：
 
 ```text
-停止原因: 条目 7-Zip 25.01 (x64) 执行失败（退出码 2147954429 / 2147954431），已停止并保留现状
+[重装] 7-Zip 25.01 (x64) —— 指定了安装目录，跳过幂等检查
+[执行] 7-Zip 25.01 (x64) —— winget install --id 7zip.7zip ... --location "C:\Apps\7zip-winget" --force
+[目录] 7-Zip 25.01 (x64) —— 未验证（未找到 InstallLocation）
+执行完成: 成功 1 · 跳过 0 · 失败 0 · 阻止 0 · PATH 新增 0
 ```
 
-退出码对应 `0x80072EFD` / `0x80072EFF`（winget 源连接失败/重置），没有生成最终 `unverified` 报告。
+报告 `alpha-winget-apply.json`：
 
-直接用同一条 winget 命令安装成功：
+```text
+status               = succeeded
+tier                 = winget
+install_dir          = C:\Apps\7zip-winget
+install_dir_verified = false
+install_dir_actual   = 空
+reinstall            = true
+```
+
+注册表实际：
 
 ```text
 REQ_7ZIP=True
 ENTRY=7-Zip|7-Zip 26.06 (x64)|26.06|LOC=C:\Apps\7zip-winget\
 ```
 
+账本 `alpha-winget-ledger.yaml`：`install_dir=C:\Apps\7zip-winget`、`verified=false`、无 `actual_dir`。
+
 结论：
 
 - winget 接受 `--location`，实际落点为请求目录，`--force` 也在命令中。
-- alpha 二进制的 envlift apply 因 guest 网络到 winget 源不稳定而未完成，不能记为通过。
-- 旧二进制历史运行曾得到 `unverified`（winget 装 26.06、配置期望 25.01），但该结果**非最终验收二进制**，只作历史参考。
+- envlift apply 完成，报告 `unverified`；原因是 winget 装 26.06、配置期望 25.01，
+  DisplayName 精确匹配未命中，`install_dir_actual` 为空。这是保守结果，不是把未验证写成已验证。
+- 场景 5 记为“通过（alpha，版本漂移 unverified）”。
 
 ### 场景 6：降级目录丢失
 
-计划：
+alpha 计划 `alpha-fallback-plan.json`：
 
 ```text
 command       = winget install --id Vendor.DoesNotExist ... --location "C:\Apps\fallback" --force
@@ -189,7 +204,7 @@ fallback      = 指定目录时不可降级到本地包（配方未声明本地�
 fallback_plan = null
 ```
 
-apply：
+alpha apply：
 
 ```text
 [执行] Fallback App —— winget install --id Vendor.DoesNotExist ...
@@ -197,6 +212,8 @@ apply：
 ```
 
 没有 `[降级]` 行；`C:\envlift\fallback-ran.txt` 标记文件不存在（`MARKER=NO`）。
+报告 `alpha-fallback-report.json`：`status=failed`、`tier=winget`，失败原因是 winget 找不到
+`Vendor.DoesNotExist`，没有执行本地降级。
 
 ### 场景 7：账本与实际不符
 
@@ -303,7 +320,9 @@ reinstall      = true
 - `alpha-7zip-second.json`：场景 2（alpha）
 - `alpha-7zip-dir2.json`：场景 3（alpha）
 - `alpha-noop-first.json` / `alpha-noop-second.json`：场景 4（alpha）
-- `alpha-winget-dryrun.txt` / `alpha-winget-check.txt` / `alpha-winget-apply-failure.txt` / `alpha-winget-net.txt`：场景 5（alpha）
+- `alpha-winget-dryrun.txt` / `alpha-winget-apply.json` / `alpha-winget-apply.md` / `alpha-winget-check.txt` / `alpha-winget-ledger.yaml` / `alpha-winget-source-update.txt`：场景 5（alpha）
+- `alpha-winget-apply-failure.txt` / `alpha-winget-net.txt`：场景 5 早期网络失败记录（历史）
+- `alpha-fallback-plan.json` / `alpha-fallback-report.json` / `alpha-fallback-apply.txt` / `alpha-fallback-check.txt`：场景 6（alpha）
 - `restore-20261103-102726.*` / `102804.*` / `102905.*` / `102700.*` / `102856.*` / `102806.*`：旧二进制历史结果（非最终）
 - `restore-20261103-102743.json`：场景 6
 - `restore-20261103-102814.*`：场景 7
@@ -323,11 +342,7 @@ reinstall      = true
 - 场景 12（回滚限制）：已确认安装目录变更不提供自动卸载回滚；PATH 回滚本轮未重跑，
   沿用 2026-11-03 F7 结果。checklist 第 124 行保持未勾选。
 - Git for Windows 2.56.0 的 `/DIR` 仍未生效；本轮改用 7-Zip NSIS 完成本地目录验收。
-- 场景 5 alpha 复跑：命令与 `--location`/`--force` 正确，直接 winget 已确认落点为
-  `C:\Apps\7zip-winget`；但 envlift apply 两次被 guest 到 winget 源的连接错误打断
-  （`0x80072EFD` / `0x80072EFF`），没有最终 `unverified` 报告。旧 `unverified`
-  结果来自非最终二进制，只作历史参考。
-- winget 版本漂移导致的 `unverified` 是保守结果，不是安装目录失败；后续可考虑按配方
-  `match_display` 或 winget 包名辅助匹配。
+- 场景 5 alpha 已完成；winget 版本漂移（装 26.06、配置 25.01）导致报告 `unverified`。
+  这是保守结果，不是安装目录失败；后续可考虑按配方 `match_display` 或 winget 包名辅助匹配。
 - 可选诊断改进（E）未做：`InstallLocations` 仍会把读取错误折叠为零候选；
   场景 8 的安全行为正确，但日志显示“不符”而不是“读取失败”。

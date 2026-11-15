@@ -1,0 +1,104 @@
+{
+  "app": "envlift",
+  "kind": "restore-plan",
+  "schema": 1,
+  "generated_at": "2026-11-03T10:27:56+08:00",
+  "raw_config": true,
+  "target": {
+    "os": "Windows 11",
+    "build": "26300",
+    "arch": "amd64",
+    "username": "${USER}",
+    "hostname": "${HOST}",
+    "elevated": false,
+    "winget_ok": true,
+    "winget_version": "v1.11.510",
+    "winget_force_ok": true,
+    "network_ok": true,
+    "runtimes": {
+      "cargo": {
+        "present": false
+      },
+      "dotnet": {
+        "present": false
+      },
+      "git": {
+        "present": false
+      },
+      "go": {
+        "present": false
+      },
+      "java": {
+        "present": false
+      },
+      "node": {
+        "present": false
+      },
+      "powershell": {
+        "present": true,
+        "version": "5.1.26100.9444",
+        "path": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+      },
+      "python": {
+        "present": true,
+        "path": "C:\\Users\\${USER}\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe"
+      }
+    },
+    "path_dirs": [
+      "C:\\WINDOWS\\system32",
+      "C:\\WINDOWS",
+      "C:\\WINDOWS\\System32\\Wbem",
+      "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\",
+      "C:\\WINDOWS\\System32\\OpenSSH\\",
+      "C:\\Users\\${USER}\\AppData\\Local\\Microsoft\\WindowsApps"
+    ],
+    "drives": [
+      "A:",
+      "C:",
+      "D:",
+      "E:"
+    ]
+  },
+  "preflight": {
+    "installer_files": 1,
+    "installer_matched": 1,
+    "recipes": 34,
+    "software_total": 1,
+    "software_matched": 1
+  },
+  "items": [
+    {
+      "target_id": "5f35cbacae03",
+      "kind": "software",
+      "name": "Fallback App",
+      "expected_version": "1.0",
+      "tier": "winget",
+      "status": "planned",
+      "decision": "set_location",
+      "command": "winget install --id Vendor.DoesNotExist --exact --silent --accept-package-agreements --accept-source-agreements --location \"C:\\Apps\\fallback\" --force",
+      "needs_admin": true,
+      "expect_reboot": false,
+      "fallback": "指定目录时不可降级到本地包（配方未声明本地目录参数）",
+      "reason": "按决策指定安装目录 C:\\Apps\\fallback",
+      "recipe": "fallback-app",
+      "recipe_source": "user",
+      "matched_by": "winget_id",
+      "install_dir": "C:\\Apps\\fallback",
+      "install_dir_applied": true,
+      "reinstall": true,
+      "install_dir_supported": true
+    }
+  ],
+  "path_changes": null,
+  "summary": {
+    "total": 1,
+    "winget": 1,
+    "local": 0,
+    "manual": 0,
+    "skipped": 0,
+    "pending_confirm": 0,
+    "ambiguous": 0,
+    "blocked_needs_decision": 0,
+    "by_decision": 1
+  }
+}

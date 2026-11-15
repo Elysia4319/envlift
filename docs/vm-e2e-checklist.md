@@ -106,8 +106,8 @@
 ## 11. 安装目录与重装
 
 - [x] 本地 Inno/NSIS 包指定新目录，安装后注册表 `InstallLocation` 与目标目录一致。
-- [ ] winget 包指定新目录，确认该包的 `--location` 是否被接受。（场景 5 部分通过：直接 winget 确认落点；envlift apply 被 winget 源超时打断）
-- [ ] winget 失败后本地降级：如果本地配方没有 `install_dir_arg`，确认不会静默装到默认目录。（旧二进制历史通过，未用 alpha 复跑）
+- [x] winget 包指定新目录，确认该包的 `--location` 是否被接受。（场景 5 alpha：apply 完成，报告 unverified，注册表落点正确）
+- [x] winget 失败后本地降级：如果本地配方没有 `install_dir_arg`，确认不会静默装到默认目录。（场景 6 alpha：fallback_plan=null，无降级，MARKER=NO）
 - [x] 已安装软件设置新目录，确认进入重装而不是 `skipped`。
 - [x] 重装失败时报告能看出失败原因，不显示 `succeeded`。
 - [x] 确认报告在目录未验证时显示 `unverified`/实际目录，不显示成“已验证成功”。
@@ -131,8 +131,8 @@
 | 2. 同目录第二次 apply | 通过（alpha） | `status=skipped`、Reinstall=false、未执行安装命令 | 账本保留 |
 | 3. 改目录第三次 apply | 通过（alpha） | `/D=C:\Apps\7zip2`；账本 actual_dir 更新 | 同 target_id |
 | 4. expect_reboot | 通过（alpha） | 第一次停在重启并写账本；重启后第二次 skipped | 无害 noop |
-| 5. winget 包 | 部分通过（alpha 环境网络） | `--location` 与 `--force` 均在命令中；直接 winget 落点为请求目录 | envlift apply 复跑被 winget 源超时打断；旧结果非最终 |
-| 6. 降级目录丢失 | 历史通过（旧二进制，非最终） | `fallback_plan=null`、无 `[降级]`、标记文件不存在 | 未用 alpha 复跑 |
+| 5. winget 包 | 通过（alpha，版本漂移 unverified） | `--location` 与 `--force` 均在命令中；apply 完成；注册表落点为请求目录 | 报告 unverified；winget 装 26.06、配置 25.01 |
+| 6. 降级目录丢失 | 通过（alpha） | `fallback_plan=null`、无 `[降级]`、标记文件不存在 | 不会装到默认目录 |
 | 7. 账本与实际不符 | 历史通过（旧二进制，非最终） | 打印“账本记录与实际不符，重新安装”并真正重装 | actual_dir 更新 |
 | 8. InstallLocation 读取失败 | 历史通过（旧二进制，非最终） | 拒绝读取后未跳过、执行安装并标 unverified | 读取错误被折叠为“未找到” |
 | 9. 候选去重 | 历史通过（旧二进制，非最终） | 同路径去重为 1 并跳过；不同路径标 unverified 并列出候选 | HKLM/HKCU |
@@ -141,7 +141,7 @@
 | 12. 回滚限制 | 部分通过（旧二进制，非最终） | 安装目录-only journal 无 PATH 快照；7-Zip 仍安装 | PATH 回滚沿用 2026-11-03 F7 |
 | 13. 重装失败报告 | 通过（alpha） | `fail-setup.exe` 退出 1；报告 `status=failed`、failure_reason 可读；无账本 | 未出现 succeeded |
 
-> 只有场景 1–4、13 为 alpha 最终通过；场景 5 部分通过；场景 6–10 为旧二进制历史；
+> 场景 1–6、13 为 alpha 最终通过；场景 7–10 为旧二进制历史；
 > 场景 11 未验证；场景 12 部分通过。完整证据见
 > `docs/evidence/install-dir-20261115.md` 与 `docs/evidence/install-dir-20261115/`。
 > 第 124 行保持未勾选：安装目录变更不提供自动卸载回滚；PATH 回滚本轮未重跑，
