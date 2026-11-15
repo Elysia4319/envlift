@@ -19,6 +19,7 @@ import (
 	"github.com/Elysia4319/envlift/internal/pathmgmt"
 	"github.com/Elysia4319/envlift/internal/plan"
 	"github.com/Elysia4319/envlift/internal/probe"
+	"github.com/Elysia4319/envlift/internal/recipes"
 	"github.com/Elysia4319/envlift/internal/relocation"
 	"github.com/Elysia4319/envlift/internal/report"
 	"github.com/Elysia4319/envlift/internal/scan"
@@ -133,7 +134,7 @@ func runRestore(args []string) int {
 		Target:         target,
 		InstallerDir:   absInstallerDir,
 		InstallerFiles: files,
-		Recipes:        mergeRecipes(cfg),
+		Recipes:        recipes.Merge(cfg),
 		Now:            time.Now(),
 		Exists:         pathExists,
 		Expand:         redactor.ExpandString,
@@ -271,29 +272,6 @@ func listInstallerFiles(dir string) ([]string, error) {
 		out = append(out, e.Name())
 	}
 	return out, nil
-}
-
-// mergeRecipes 合并内置配方与用户配方：同名时用户条目覆盖内置（D6）。
-// 本轮内置表为空，逻辑先立好，第 ④ 步接入时不用改调用方。
-func mergeRecipes(cfg *config.Config) []config.Installer {
-	builtin := []config.Installer{}
-
-	byName := make(map[string]int, len(builtin)+len(cfg.Installers))
-	out := make([]config.Installer, 0, len(builtin)+len(cfg.Installers))
-	for _, r := range builtin {
-		byName[strings.ToLower(r.Name)] = len(out)
-		out = append(out, r)
-	}
-	for _, r := range cfg.Installers {
-		key := strings.ToLower(r.Name)
-		if i, ok := byName[key]; ok {
-			out[i] = r
-			continue
-		}
-		byName[key] = len(out)
-		out = append(out, r)
-	}
-	return out
 }
 
 func writePlanJSON(path string, p *plan.Plan) error {

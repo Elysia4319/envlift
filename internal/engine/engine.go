@@ -371,7 +371,7 @@ func buildPlan(c Config, cfg *config.Config, rawDecisions json.RawMessage) (*pla
 		Target:         target,
 		InstallerDir:   absDir,
 		InstallerFiles: names,
-		Recipes:        mergeRecipes(cfg),
+		Recipes:        recipes.Merge(cfg),
 		Now:            time.Now(),
 		Exists:         func(p string) bool { _, err := os.Stat(p); return err == nil },
 		Expand:         red.ExpandString,
@@ -387,24 +387,6 @@ func buildPlan(c Config, cfg *config.Config, rawDecisions json.RawMessage) (*pla
 		p.Warnings = append(p.Warnings, "重装账本读取失败，按空账本继续: "+ledgerErr.Error())
 	}
 	return p, nil
-}
-
-func mergeRecipes(cfg *config.Config) []config.Installer {
-	out := append([]config.Installer{}, recipes.Builtin()...)
-	idx := map[string]int{}
-	for i, r := range out {
-		idx[strings.ToLower(r.Name)] = i
-	}
-	for _, r := range cfg.Installers {
-		k := strings.ToLower(r.Name)
-		if i, ok := idx[k]; ok {
-			out[i] = r
-			continue
-		}
-		idx[k] = len(out)
-		out = append(out, r)
-	}
-	return out
 }
 
 func doApply(c Config, p *plan.Plan, conf api.Confirmations, rep task.Reporter) ([]byte, error) {
