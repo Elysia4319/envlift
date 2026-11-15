@@ -83,6 +83,9 @@ func RenderMarkdown(d *Document) string {
 		if note == "" {
 			note = it.Reason
 		}
+		if it.Reinstall {
+			note = "重装；" + note
+		}
 		after := orDash(it.ActualVersion)
 		if it.VersionUnparsed {
 			after = "解析失败"

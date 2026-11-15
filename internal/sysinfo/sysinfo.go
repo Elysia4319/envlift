@@ -44,7 +44,9 @@ type Info struct {
 	Drives          []Drive
 	WingetAvailable bool
 	WingetVersion   string
-	Elevated        bool
+	// WingetForceAvailable 表示 `winget install --help` 明确列出 --force。
+	WingetForceAvailable bool
+	Elevated             bool
 	// Warnings 记录「部分失败但不影响整体」的问题，供预览展示。
 	Warnings []string
 }
@@ -132,6 +134,9 @@ func (c windowsCollector) Collect() (Info, error) {
 	info.Elevated = isElevated()
 
 	info.WingetAvailable, info.WingetVersion = wingetVersion()
+	if info.WingetAvailable {
+		info.WingetForceAvailable = wingetForceAvailable()
+	}
 	return info, nil
 }
 
@@ -184,4 +189,22 @@ func wingetVersion() (bool, string) {
 		return false, ""
 	}
 	return true, strings.TrimSpace(string(out))
+}
+
+func wingetForceAvailable() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "winget", "install", "--help")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return false
+	}
+	return wingetHelpHasForce(string(out))
+}
+
+// wingetHelpHasForce 只认帮助文本里明确出现的 --force，不按版本号猜。
+func wingetHelpHasForce(help string) bool {
+	return strings.Contains(help, "--force")
 }

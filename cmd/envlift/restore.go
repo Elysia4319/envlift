@@ -198,16 +198,17 @@ func runRestore(args []string) int {
 
 func buildTarget(env *scan.Environment) plan.Target {
 	t := plan.Target{
-		OS:        env.Info.OSVersion,
-		Build:     env.Info.OSBuild,
-		Arch:      env.Info.Arch,
-		Username:  env.Info.Username,
-		Hostname:  env.Info.Hostname,
-		Elevated:  env.Info.Elevated,
-		WingetOK:  env.Info.WingetAvailable,
-		WingetVer: env.Info.WingetVersion,
-		Runtimes:  make(map[string]plan.RuntimeState, len(env.Runtimes)),
-		PathDirs:  env.PathDirs,
+		OS:            env.Info.OSVersion,
+		Build:         env.Info.OSBuild,
+		Arch:          env.Info.Arch,
+		Username:      env.Info.Username,
+		Hostname:      env.Info.Hostname,
+		Elevated:      env.Info.Elevated,
+		WingetOK:      env.Info.WingetAvailable,
+		WingetVer:     env.Info.WingetVersion,
+		WingetForceOK: env.Info.WingetForceAvailable,
+		Runtimes:      make(map[string]plan.RuntimeState, len(env.Runtimes)),
+		PathDirs:      env.PathDirs,
 	}
 	for _, d := range env.Info.Drives {
 		t.Drives = append(t.Drives, d.Letter)

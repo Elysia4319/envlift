@@ -330,7 +330,8 @@ func buildPlan(c Config, cfg *config.Config, rawDecisions json.RawMessage) (*pla
 		OS: env.Info.OSVersion, Build: env.Info.OSBuild, Arch: env.Info.Arch,
 		Username: env.Info.Username, Hostname: env.Info.Hostname, Elevated: env.Info.Elevated,
 		WingetOK: env.Info.WingetAvailable, WingetVer: env.Info.WingetVersion,
-		NetworkOK: netOK, NetworkNote: netNote,
+		WingetForceOK: env.Info.WingetForceAvailable,
+		NetworkOK:     netOK, NetworkNote: netNote,
 		Runtimes: map[string]plan.RuntimeState{},
 		PathDirs: env.PathDirs,
 	}

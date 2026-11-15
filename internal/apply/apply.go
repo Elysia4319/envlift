@@ -187,7 +187,10 @@ func Run(opts Options) (*Result, error) {
 		}
 
 		// C4.1/P1：先跑 verify 判断是否已完成，已完成就跳过，不重装。
-		if it.VerifyCmd != "" {
+		// 指定安装目录是显式重装：verify 通过也不能跳过。
+		if it.Reinstall || it.InstallDirApplied {
+			fmt.Fprintf(opts.Out, "  [重装] %s —— 指定了安装目录，跳过幂等检查\n", it.Name)
+		} else if it.VerifyCmd != "" {
 			vr := opts.Exec.Run(context.Background(), it.VerifyCmd, 60*time.Second)
 			if verifyPassed(vr, it.VerifyExpect) {
 				// 已经装好：verify 的输出就是「现在装的是什么版本」，回填给报告。
@@ -223,7 +226,8 @@ func Run(opts Options) (*Result, error) {
 		step := Step{
 			Index: i, Kind: it.Kind, Name: it.Name, Tier: it.Tier,
 			Command: it.Command, NeedsAdmin: it.NeedsAdmin, ExpectReboot: it.ExpectReboot,
-			ExitCode: rr.ExitCode, Output: truncate(rr.Output, 2000), Status: status,
+			Reinstall: it.Reinstall,
+			ExitCode:  rr.ExitCode, Output: truncate(rr.Output, 2000), Status: status,
 			StartedAt: started, FinishedAt: opts.Now().Format(time.RFC3339),
 		}
 

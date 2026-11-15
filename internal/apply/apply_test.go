@@ -1,6 +1,7 @@
 package apply
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -107,6 +108,44 @@ func TestApplySkipsWhenVerifyPasses(t *testing.T) {
 		if strings.HasPrefix(c, "winget install") {
 			t.Error("已完成时不应执行安装命令")
 		}
+	}
+}
+
+// 指定安装目录意味着重装：即使 verify 已通过，也必须执行安装命令。
+func TestApplyReinstallsWhenInstallDirApplied(t *testing.T) {
+	ex := &fakeExec{results: map[string]ExecResult{
+		"git --version": {ExitCode: 0, Output: "git version 2.56.0"},
+		"install-git":   {ExitCode: 0, Output: "installed"},
+	}}
+	p := testPlan(plan.Item{
+		Kind: "software", Name: "Git", Status: plan.StatusPlanned, Tier: plan.TierLocal,
+		Command: "install-git", VerifyCmd: "git --version", VerifyExpect: "git version",
+		InstallDir: `D:\Apps\Git`, InstallDirApplied: true, Reinstall: true,
+	})
+	var out bytes.Buffer
+	o := baseOpts(t, p, ex, &fakePaths{})
+	o.Out = &out
+
+	res, err := Run(o)
+	if err != nil {
+		t.Fatalf("Run 失败: %v", err)
+	}
+	if res.Skipped != 0 || res.Executed != 1 {
+		t.Fatalf("指定目录后应重装而不是跳过: %+v", res)
+	}
+	if !strings.Contains(out.String(), "[重装] Git") {
+		t.Errorf("缺少重装日志: %s", out.String())
+	}
+	if len(ex.calls) == 0 || ex.calls[0] != "install-git" {
+		t.Errorf("应直接执行安装命令，实际调用: %v", ex.calls)
+	}
+
+	loaded, err := LoadJournal(o.Journal.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Steps) != 1 || !loaded.Steps[0].Reinstall {
+		t.Errorf("journal 应记录 reinstall: %+v", loaded.Steps)
 	}
 }
 

@@ -40,3 +40,12 @@ func TestOSLabel(t *testing.T) {
 		t.Errorf("OSLabel() = %q, want %q", got, want)
 	}
 }
+
+func TestWingetHelpHasForce(t *testing.T) {
+	if !wingetHelpHasForce("  --force   Direct run the command") {
+		t.Error("帮助文本含 --force 时应判定支持")
+	}
+	if wingetHelpHasForce("  --location   Location to install to") {
+		t.Error("帮助文本不含 --force 时不应误判")
+	}
+}

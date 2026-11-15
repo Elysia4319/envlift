@@ -353,11 +353,15 @@ func TestReportCarriesInstallDirAndMarkdownColumn(t *testing.T) {
 	p := samplePlan()
 	p.Items[0].InstallDir = `D:\Apps\Git`
 	p.Items[0].InstallDirApplied = true
+	p.Items[0].Reinstall = true
 	p.Items[0].VerifyCmd = "git --version"
 
 	doc := Build(Input{Plan: p}, time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
 	if doc.Items[0].InstallDir != `D:\Apps\Git` || !doc.Items[0].InstallDirApplied {
 		t.Errorf("报告未保留安装目录: %+v", doc.Items[0])
+	}
+	if !doc.Items[0].Reinstall {
+		t.Error("报告应标记重装")
 	}
 	md := RenderMarkdown(doc)
 	if !strings.Contains(md, "安装目录") {
@@ -365,6 +369,9 @@ func TestReportCarriesInstallDirAndMarkdownColumn(t *testing.T) {
 	}
 	if !strings.Contains(md, `D:\Apps\Git`) {
 		t.Error("markdown 未显示安装目录")
+	}
+	if !strings.Contains(md, "重装") {
+		t.Error("markdown 未标记重装")
 	}
 	if !strings.Contains(md, "verify 命令可能仍指向旧路径") {
 		t.Error("指定目录且存在 verify 时应在风险提示中提醒")

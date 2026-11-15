@@ -70,7 +70,9 @@ type Target struct {
 	Elevated  bool   `json:"elevated"`
 	WingetOK  bool   `json:"winget_ok"`
 	WingetVer string `json:"winget_version,omitempty"`
-	NetworkOK bool   `json:"network_ok"`
+	// WingetForceOK 表示本机 winget 的 install 子命令支持 --force。
+	WingetForceOK bool `json:"winget_force_ok,omitempty"`
+	NetworkOK     bool `json:"network_ok"`
 	// NetworkNote 说明网络判定的依据（探测失败时写原因）。
 	NetworkNote string `json:"network_note,omitempty"`
 	// Runtimes 以运行时名为键。
@@ -170,6 +172,8 @@ type Item struct {
 	// 它们不进 target_id（D23）：身份仍由软件本身决定，目录只是本次执行参数。
 	InstallDir        string `json:"install_dir,omitempty"`
 	InstallDirApplied bool   `json:"install_dir_applied,omitempty"`
+	// Reinstall 表示本次即使 verify 通过也要执行安装（指定目录后的重装语义）。
+	Reinstall bool `json:"reinstall,omitempty"`
 	// InstallDirSupported 表示该条目命中的配方是否声明了安装目录模板。
 	InstallDirSupported bool `json:"install_dir_supported,omitempty"`
 	// 以下三个字段供去重选代表与报告展示（A2）。
@@ -573,8 +577,7 @@ func buildSoftwareItems(cfg *config.Config, opts Options, m *match.Matcher, byRe
 				}
 				it.ExpectReboot = r.ExpectReboot
 			}
-			it.InstallDirSupported = idx >= 0 &&
-				(opts.Recipes[idx].InstallDirArg != "" || opts.Recipes[idx].WingetLocationArg != "")
+			it.InstallDirSupported = idx >= 0 && opts.Recipes[idx].WingetLocationArg != ""
 			if hasLocal {
 				fb := it
 				fb.Tier = TierLocal
@@ -603,7 +606,11 @@ func buildSoftwareItems(cfg *config.Config, opts Options, m *match.Matcher, byRe
 				r := opts.Recipes[idx]
 				out.InstallDir = dir
 				out.InstallDirApplied = dir != ""
-				out.Command = buildWingetCommand(*sw.WingetID, applyInstallDir(r.WingetLocationArg, dir))
+				extra := applyInstallDir(r.WingetLocationArg, dir)
+				if opts.Target.WingetForceOK {
+					extra = strings.TrimSpace(extra + " --force")
+				}
+				out.Command = buildWingetCommand(*sw.WingetID, extra)
 				if out.FallbackPlan != nil {
 					fb := *out.FallbackPlan
 					fb.InstallDir = dir

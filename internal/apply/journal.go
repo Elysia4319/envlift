@@ -20,6 +20,7 @@ type Step struct {
 	Command      string `json:"command,omitempty"`
 	NeedsAdmin   bool   `json:"needs_admin"`
 	ExpectReboot bool   `json:"expect_reboot"`
+	Reinstall    bool   `json:"reinstall,omitempty"`
 	ExitCode     int    `json:"exit_code"`
 	Output       string `json:"output,omitempty"`
 	Status       string `json:"status"` // ok / failed / skipped / blocked

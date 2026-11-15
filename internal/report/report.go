@@ -92,6 +92,7 @@ type ItemResult struct {
 	// InstallDir / InstallDirApplied 记录 set_location 决策指定的安装目录。
 	InstallDir        string `json:"install_dir,omitempty"`
 	InstallDirApplied bool   `json:"install_dir_applied,omitempty"`
+	Reinstall         bool   `json:"reinstall,omitempty"`
 	// VerifyCommandPresent 只表示配方声明了 verify；风险提示需要它，
 	// 但完整 verify 命令属于计划内部细节，不写进报告。
 	VerifyCommandPresent bool `json:"verify_command_present,omitempty"`
@@ -262,6 +263,7 @@ func buildItems(p *plan.Plan, steps []apply.Step) []ItemResult {
 			ManualHint:           it.ManualHint,
 			InstallDir:           it.InstallDir,
 			InstallDirApplied:    it.InstallDirApplied,
+			Reinstall:            it.Reinstall,
 			VerifyCommandPresent: it.VerifyCmd != "",
 		}
 		if s, ok := byKey[strconv.Itoa(i)+"|"+it.Kind]; ok {
