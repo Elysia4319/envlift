@@ -1,0 +1,2 @@
+﻿REQ_7ZIP=True
+ENTRY=7-Zip 26.06 (x64)|26.06|LOC=C:\Apps\7zip-winget\

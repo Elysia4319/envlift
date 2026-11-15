@@ -1,0 +1,58 @@
+{
+  "report_schema": 1,
+  "kind": "restore-report",
+  "generated_at": "2026-11-03T10:45:10+08:00",
+  "config_path": "envlift.yaml",
+  "journal": "reports\\.envlift-journal-20261103-104507.json",
+  "env": {
+    "os": "Windows 11",
+    "build": "26300",
+    "arch": "amd64",
+    "username": "${USER}",
+    "hostname": "${HOST}",
+    "winget_ok": true,
+    "network_ok": true,
+    "elevated": false
+  },
+  "plan_hash": "6167f9d49f84ecffbba45eb4b32a0f2df4f8d936e0058cb152182734a2f7cbf4",
+  "mode": "apply",
+  "summary": {
+    "total": 1,
+    "succeeded": 0,
+    "skipped": 0,
+    "manual": 0,
+    "blocked_needs_decision": 0,
+    "failed": 1,
+    "path_writes": 0,
+    "awaiting_reboot": false
+  },
+  "items": [
+    {
+      "target_id": "9426a99d2924",
+      "kind": "software",
+      "name": "Fail Install",
+      "expected_version": "1.0",
+      "tier": "local",
+      "status": "failed",
+      "command": "\"C:\\envlift\\cases\\fail-install\\installers\\fail-setup.exe\" /S /D=C:\\Apps\\fail",
+      "exit_code": 1,
+      "verify_result": "not_run",
+      "failure_reason": "simulated installer failure: exit 1",
+      "needs_admin": false,
+      "expect_reboot": false,
+      "decision": "set_location",
+      "reason": "按决策指定安装目录 C:\\Apps\\fail",
+      "install_dir": "C:\\Apps\\fail",
+      "install_dir_applied": true,
+      "reinstall": true
+    }
+  ],
+  "path_changes": [],
+  "warnings": null,
+  "decisions": {
+    "apply_mode": "all",
+    "actions": {
+      "set_location": 1
+    }
+  }
+}

@@ -127,19 +127,19 @@
 
 | 场景 | 结果 | 关键证据 | 备注 |
 |---|---|---|---|
-| 1. 本地包首次 apply | 通过 | 7-Zip NSIS：`/S /D=C:\Apps\7zip`；报告 verified=true、actual_dir=`C:\Apps\7zip\` | 使用真实 DisplayName |
-| 2. 同目录第二次 apply | 通过 | `status=skipped`、Reinstall=false、未执行安装命令 | 账本保留 |
-| 3. 改目录第三次 apply | 通过 | `/D=C:\Apps\7zip2`；账本 actual_dir 更新 | 同 target_id |
-| 4. expect_reboot | 通过 | 第一次停在重启并写账本；重启后第二次 skipped | 无害 noop |
-| 5. winget 包 | 通过（caveat） | `--location` 与 `--force` 均在命令中；注册表落点为请求目录 | winget 装 26.06、配置 25.01，报告保守 unverified |
-| 6. 降级目录丢失 | 通过 | `fallback_plan=null`、无 `[降级]`、标记文件不存在 | 不会装到默认目录 |
-| 7. 账本与实际不符 | 通过 | 打印“账本记录与实际不符，重新安装”并真正重装 | actual_dir 更新 |
-| 8. InstallLocation 读取失败 | 通过（安全行为） | 拒绝读取后未跳过、执行安装并标 unverified | 读取错误被折叠为“未找到” |
-| 9. 候选去重 | 通过 | 同路径去重为 1 并跳过；不同路径标 unverified 并列出候选 | HKLM/HKCU |
-| 10. 账本异常 | 通过 | 损坏/version>1 warning；不可写 warning 但安装继续 | 见证据 |
+| 1. 本地包首次 apply | 通过（alpha） | 7-Zip NSIS：`/S /D=C:\Apps\7zip`；报告 verified=true、actual_dir=`C:\Apps\7zip\` | 使用真实 DisplayName |
+| 2. 同目录第二次 apply | 通过（alpha） | `status=skipped`、Reinstall=false、未执行安装命令 | 账本保留 |
+| 3. 改目录第三次 apply | 通过（alpha） | `/D=C:\Apps\7zip2`；账本 actual_dir 更新 | 同 target_id |
+| 4. expect_reboot | 通过（alpha） | 第一次停在重启并写账本；重启后第二次 skipped | 无害 noop |
+| 5. winget 包 | 部分通过（alpha 环境网络） | `--location` 与 `--force` 均在命令中；直接 winget 落点为请求目录 | envlift apply 复跑被 winget 源超时打断；旧结果非最终 |
+| 6. 降级目录丢失 | 历史通过（旧二进制，非最终） | `fallback_plan=null`、无 `[降级]`、标记文件不存在 | 未用 alpha 复跑 |
+| 7. 账本与实际不符 | 历史通过（旧二进制，非最终） | 打印“账本记录与实际不符，重新安装”并真正重装 | actual_dir 更新 |
+| 8. InstallLocation 读取失败 | 历史通过（旧二进制，非最终） | 拒绝读取后未跳过、执行安装并标 unverified | 读取错误被折叠为“未找到” |
+| 9. 候选去重 | 历史通过（旧二进制，非最终） | 同路径去重为 1 并跳过；不同路径标 unverified 并列出候选 | HKLM/HKCU |
+| 10. 账本异常 | 历史通过（旧二进制，非最终） | 损坏/version>1 warning；不可写 warning 但安装继续 | 见证据 |
 | 11. 无 LocationReader | 未验证 | CLI 固定注入 RegistryLocationReader | 单测覆盖 |
-| 12. 回滚限制 | 部分通过 | 安装目录-only journal 无 PATH 快照；7-Zip 仍安装 | PATH 回滚沿用 2026-11-03 F7 |
-| 13. 重装失败报告 | 通过 | `fail-setup.exe` 退出 1；报告 `status=failed`、failure_reason 可读；无账本 | 未出现 succeeded |
+| 12. 回滚限制 | 部分通过（旧二进制，非最终） | 安装目录-only journal 无 PATH 快照；7-Zip 仍安装 | PATH 回滚沿用 2026-11-03 F7 |
+| 13. 重装失败报告 | 通过（alpha） | `fail-setup.exe` 退出 1；报告 `status=failed`、failure_reason 可读；无账本 | 未出现 succeeded |
 
 > 本轮已勾选通过项；场景 11 与场景 12 的部分内容仍未验证。完整证据见
 > `docs/evidence/install-dir-20261115.md` 与 `docs/evidence/install-dir-20261115/`。

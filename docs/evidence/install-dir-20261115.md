@@ -7,26 +7,27 @@
 - Guest：Windows 11 Home，build `26300`，版本 `10.0.26300`
 - winget：`v1.11.510`；`winget install --help` 含 `--force`
 - 权限：普通会话 `ADMIN=False`；最高权限交互式计划任务 `ADMIN=True`、Session 1
-- 旧 VM 场景二进制：`envlift 0.1.0-alpha (schema v1)`
-- 干净重建验收二进制：`envlift 0.1.0-dev (schema v1)`
-- 二进制 SHA256：`3A020C190AC49E840DF1DB239AF7C3FC339D24402B325104AC7C358786B2941F`
-- 验收代码基线：`61b9ffd`（代码提交 `cacd696`；后续 `e36ff3a` 仅文档收尾）
+- 最终验收二进制：`envlift 0.1.0-alpha (schema v1)`
+- 验收提交：`ec4e7e9`（代码提交 `cacd696`；`61b9ffd`、`e36ff3a`、`ec4e7e9` 为文档/证据）
+- 二进制 SHA256：`455C7AB887A4ABCBA7C01239240D337D6F2272A14226667FABF4531F05E3A0DE`
 
-## 干净构建与 SHA 说明
+## 最终验收二进制
 
-本轮从干净提交重新构建：
+从当前 HEAD `ec4e7e9` 重新构建：
 
 ```text
-go build -trimpath -buildvcs=false -ldflags "-s -w" -o tmp\envlift-accept.exe ./cmd/envlift
+go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=0.1.0-alpha" -o tmp\envlift-accept.exe ./cmd/envlift
 ```
 
-- 新二进制 SHA256：`3A020C190AC49E840DF1DB239AF7C3FC339D24402B325104AC7C358786B2941F`
-- 旧二进制 SHA256：`3A5DDD63EA5949FC3A7689BF0C1B843F800A18D4F0FD69ABFCA2F5FC311A9E60`
-- 旧二进制来自 `a416826` + 未提交修复，`go version -m` 显示 `vcs.modified=true`；
-  新二进制来自 `61b9ffd`，`-buildvcs=false`，模块版本为 `(devel)`。
-- 同一干净 commit 用默认 VCS 构建得到 SHA `8B98E12DE284A2EC72FAF6075710A86CBF3C47222BE3C88AF1BAE24BFA07FBD5`，
-  说明 VCS 元信息本身也会改变 SHA。旧/新 SHA 差异同时来自提交差异与 VCS 信息，不能只归因于 VCS。
-- 旧二进制已包含同一 CLI 修复；本轮场景 13 使用新二进制重跑，其余 VM 结果保留并注明“重新构建自干净 commit”。
+- 版本：`envlift 0.1.0-alpha (schema v1)`
+- SHA256：`455C7AB887A4ABCBA7C01239240D337D6F2272A14226667FABF4531F05E3A0DE`
+- `go version -m` 显示 `-buildvcs=false`，模块版本 `(devel)`，无 `vcs.modified`。
+
+历史二进制（**非最终验收二进制**）：
+
+- `a416826` + dirty：SHA `3A5DDD63...`，`vcs.modified=true`。
+- `61b9ffd` + `-buildvcs=false`、无版本注入：SHA `3A020C19...`，版本 `0.1.0-dev`。
+- 旧结果仅作历史参考，不能作为最终 alpha 验收结论。
 
 ## 环境限制
 
@@ -51,11 +52,11 @@ go build -trimpath -buildvcs=false -ldflags "-s -w" -o tmp\envlift-accept.exe ./
 
 | 场景 | 结果 | 关键证据 | 备注 |
 |---|---|---|---|
-| 1. 本地包首次 apply | 通过 | 7-Zip NSIS：命令 `/S /D=C:\Apps\7zip`；报告 `install_dir_verified=true`、`actual_dir=C:\Apps\7zip\` | 使用真实 DisplayName `7-Zip 25.01 (x64)` |
-| 2. 同目录第二次 apply | 通过 | `status=skipped`、`Reinstall=false`、未执行安装命令、账本保留 | verify `C:\Apps\7zip\7z.exe` 通过 |
-| 3. 改目录第三次 apply | 通过 | 命令 `/D=C:\Apps\7zip2`；报告 verified=true；账本 `actual_dir=C:\Apps\7zip2\` | 同 target_id 账本更新 |
-| 4. expect_reboot | 通过 | 第一次停在“完成后需要重启”，exit 2 并写账本；重启后第二次 `skipped` | 无害 noop 安装器 |
-| 5. winget 包 | 通过（有 caveat） | 命令含 `--location "C:\Apps\7zip-winget" --force`；注册表 `InstallLocation=C:\Apps\7zip-winget\` | winget 实际装 26.06，配置期望 25.01；报告保守标 `unverified` |
+| 1. 本地包首次 apply | 通过（alpha） | 7-Zip NSIS：命令 `/S /D=C:\Apps\7zip`；报告 `install_dir_verified=true`、`actual_dir=C:\Apps\7zip\` | 使用真实 DisplayName `7-Zip 25.01 (x64)` |
+| 2. 同目录第二次 apply | 通过（alpha） | `status=skipped`、`Reinstall=false`、未执行安装命令、账本保留 | verify `C:\Apps\7zip\7z.exe` 通过 |
+| 3. 改目录第三次 apply | 通过（alpha） | 命令 `/D=C:\Apps\7zip2`；报告 verified=true；账本 `actual_dir=C:\Apps\7zip2\` | 同 target_id 账本更新 |
+| 4. expect_reboot | 通过（alpha） | 第一次停在“完成后需要重启”，exit 2 并写账本；重启后第二次 `skipped` | 无害 noop 安装器 |
+| 5. winget 包 | 部分通过（环境网络） | 命令含 `--location "C:\Apps\7zip-winget" --force`；直接 winget 安装成功且注册表落点为请求目录 | envlift apply 复跑两次均因 winget 源连接错误失败；旧二进制历史结果为 unverified |
 | 6. 降级目录丢失 | 通过 | `fallback_plan=null`；`fallback=指定目录时不可降级...`；无 `[降级]`；标记文件 `MARKER=NO` | winget 失败后没有静默装到默认目录 |
 | 7. 账本与实际不符 | 通过 | 篡改注册表后打印“账本记录与实际不符，重新安装”并执行安装；账本 `actual_dir` 更新 | 重装后 verified=true |
 | 8. InstallLocation 读取失败 | 通过（安全行为） | 拒绝读取假卸载键后未按账本跳过，执行安装并标 `unverified` | 读取错误被折叠为“未找到”，日志显示“不符”而非“读取失败” |
@@ -63,7 +64,7 @@ go build -trimpath -buildvcs=false -ldflags "-s -w" -o tmp\envlift-accept.exe ./
 | 10. 账本异常 | 通过 | 损坏 YAML/version>1 均 warning 并按空账本继续；账本不可写 warning 但安装继续 | 见 `apply-ledger-dir` 输出 |
 | 11. 无 LocationReader | 未验证 | CLI 固定注入 `RegistryLocationReader`，无法在不改代码/API 的情况下关闭 | 单测已覆盖 `Locations=nil` |
 | 12. 回滚限制 | 部分通过 | 安装目录-only journal 无 PATH 快照，rollback 报错；7-Zip 仍安装 | PATH 回滚沿用 2026-11-03 F7 结果，本轮未重跑 |
-| 13. 重装失败报告 | 通过 | `fail-setup.exe` 退出 1；报告 `status=failed`、`failure_reason=simulated installer failure: exit 1`；无账本 | 未出现 `succeeded` |
+| 13. 重装失败报告 | 通过（alpha） | `fail-setup.exe` 退出 1；报告 `status=failed`、`failure_reason=simulated installer failure: exit 1`；无账本 | 未出现 `succeeded` |
 
 ## 关键输出
 
@@ -77,7 +78,7 @@ go build -trimpath -buildvcs=false -ldflags "-s -w" -o tmp\envlift-accept.exe ./
 执行完成: 成功 1 · 跳过 0 · 失败 0
 ```
 
-报告 `restore-20261103-102726.json`：
+alpha 报告 `alpha-7zip-first.json`：
 
 ```text
 status               = succeeded
@@ -107,7 +108,7 @@ relocations:
 执行完成: 成功 0 · 跳过 1 · 失败 0
 ```
 
-报告 `restore-20261103-102804.json`：`status=skipped`，`reinstall` 为空（false），`install_dir_verified=true`。
+alpha 报告 `alpha-7zip-second.json`：`status=skipped`，`reinstall` 为空（false），`install_dir_verified=true`。
 
 ### 场景 3：改目录
 
@@ -144,23 +145,36 @@ verified: true
 执行完成: 成功 0 · 跳过 1 · 失败 0
 ```
 
-报告 `restore-20261103-102856.json`：`status=skipped`。
+alpha 报告 `alpha-noop-second.json`：`status=skipped`。
 
 ### 场景 5：winget 7-Zip
 
+alpha 二进制 dry-run 命令：
+
 ```text
 命令 winget install --id 7zip.7zip --exact --silent --accept-package-agreements --accept-source-agreements --location "C:\Apps\7zip-winget" --force
-[目录] 7-Zip 25.01 (x64) —— 未验证（未找到 InstallLocation）
 ```
 
-注册表实际：
+alpha 二进制 envlift apply 复跑两次均失败：
+
+```text
+停止原因: 条目 7-Zip 25.01 (x64) 执行失败（退出码 2147954429 / 2147954431），已停止并保留现状
+```
+
+退出码对应 `0x80072EFD` / `0x80072EFF`（winget 源连接失败/重置），没有生成最终 `unverified` 报告。
+
+直接用同一条 winget 命令安装成功：
 
 ```text
 REQ_7ZIP=True
 ENTRY=7-Zip|7-Zip 26.06 (x64)|26.06|LOC=C:\Apps\7zip-winget\
 ```
 
-结论：winget 接受 `--location`，实际落点为请求目录；但 winget 安装了 26.06，配置期望 25.01，envlift 的 DisplayName 精确匹配未命中，报告保守标 `unverified`，没有把未验证写成已验证。
+结论：
+
+- winget 接受 `--location`，实际落点为请求目录，`--force` 也在命令中。
+- alpha 二进制的 envlift apply 因 guest 网络到 winget 源不稳定而未完成，不能记为通过。
+- 旧二进制历史运行曾得到 `unverified`（winget 装 26.06、配置期望 25.01），但该结果**非最终验收二进制**，只作历史参考。
 
 ### 场景 6：降级目录丢失
 
@@ -262,7 +276,7 @@ SEVENZIP=YES
 停止原因: 条目 Fail Install 执行失败（退出码 1），已停止并保留现状
 ```
 
-报告 `restore-20261103-102644.json`：
+报告 `restore-20261103-104510.json`（alpha 二进制）：
 
 ```text
 name           = Fail Install
@@ -275,23 +289,29 @@ reinstall      = true
 
 账本文件不存在（失败不写入成功记录）。
 
+旧的 `restore-20261103-102644.*` / `fail-102643.json` 来自 `0.1.0-dev` 二进制，
+仅作历史参考，不是最终验收结果。
+
 ## 证据文件
 
 报告与 journal 见 `docs/evidence/install-dir-20261115/`：
 
-- `restore-20261103-102726.*`：场景 1
-- `restore-20261103-102804.*`：场景 2
-- `restore-20261103-102905.*`：场景 3
-- `restore-20261103-102700.*` / `restore-20261103-102856.*`：场景 4
-- `restore-20261103-102806.*`：场景 5
+- `alpha-7zip-first.json`：场景 1（alpha）
+- `alpha-7zip-second.json`：场景 2（alpha）
+- `alpha-7zip-dir2.json`：场景 3（alpha）
+- `alpha-noop-first.json` / `alpha-noop-second.json`：场景 4（alpha）
+- `alpha-winget-dryrun.txt` / `alpha-winget-check.txt` / `alpha-winget-apply-failure.txt` / `alpha-winget-net.txt`：场景 5（alpha）
+- `restore-20261103-102726.*` / `102804.*` / `102905.*` / `102700.*` / `102856.*` / `102806.*`：旧二进制历史结果（非最终）
 - `restore-20261103-102743.json`：场景 6
 - `restore-20261103-102814.*`：场景 7
 - `restore-20261103-103143.*`：场景 8
 - `restore-20261103-103002.*`：场景 9
 - `restore-20261103-103259.*`：场景 10
-- `restore-20261103-102644.*`：场景 13
+- `restore-20261103-104510.*`：场景 13（alpha）
+- `restore-20261103-102644.*`：场景 13 历史 dev 结果（非最终）
 - `7zip-102646.json` / `7zip-102812.json` / `7zip-103001.json` / `7zip-103257.json` / `readfail-103135.json`：关键 journal
-- `fail-102643.json`：场景 13 journal
+- `fail-104507.json`：场景 13 alpha journal
+- `fail-102643.json`：场景 13 历史 dev journal（非最终）
 
 ## 未完成
 
@@ -300,6 +320,11 @@ reinstall      = true
 - 场景 12（回滚限制）：已确认安装目录变更不提供自动卸载回滚；PATH 回滚本轮未重跑，
   沿用 2026-11-03 F7 结果。checklist 第 124 行保持未勾选。
 - Git for Windows 2.56.0 的 `/DIR` 仍未生效；本轮改用 7-Zip NSIS 完成本地目录验收。
-- winget 版本漂移导致的 `unverified` 是保守结果，不是安装目录失败；后续可考虑按配方 `match_display` 或 winget 包名辅助匹配。
+- 场景 5 alpha 复跑：命令与 `--location`/`--force` 正确，直接 winget 已确认落点为
+  `C:\Apps\7zip-winget`；但 envlift apply 两次被 guest 到 winget 源的连接错误打断
+  （`0x80072EFD` / `0x80072EFF`），没有最终 `unverified` 报告。旧 `unverified`
+  结果来自非最终二进制，只作历史参考。
+- winget 版本漂移导致的 `unverified` 是保守结果，不是安装目录失败；后续可考虑按配方
+  `match_display` 或 winget 包名辅助匹配。
 - 可选诊断改进（E）未做：`InstallLocations` 仍会把读取错误折叠为零候选；
   场景 8 的安全行为正确，但日志显示“不符”而不是“读取失败”。

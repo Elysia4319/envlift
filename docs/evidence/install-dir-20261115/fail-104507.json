@@ -1,0 +1,26 @@
+{
+  "app": "envlift",
+  "kind": "apply-journal",
+  "schema": 1,
+  "started_at": "2026-11-03T10:45:07+08:00",
+  "config_path": "envlift.yaml",
+  "steps": [
+    {
+      "index": 0,
+      "kind": "software",
+      "name": "Fail Install",
+      "tier": "local",
+      "command": "\"C:\\envlift\\cases\\fail-install\\installers\\fail-setup.exe\" /S /D=C:\\Apps\\fail",
+      "needs_admin": false,
+      "expect_reboot": false,
+      "reinstall": true,
+      "exit_code": 1,
+      "output": "simulated installer failure: exit 1",
+      "status": "failed",
+      "started_at": "2026-11-03T10:45:09+08:00",
+      "finished_at": "2026-11-03T10:45:10+08:00"
+    }
+  ],
+  "finished": true,
+  "stopped_reason": "条目 Fail Install 执行失败（退出码 1），已停止并保留现状"
+}
