@@ -614,8 +614,13 @@ func buildSoftwareItems(cfg *config.Config, opts Options, m *match.Matcher, byRe
 				if out.FallbackPlan != nil {
 					fb := *out.FallbackPlan
 					fb.InstallDir = dir
-					fb.Command = localCommandWithDir(opts, cand, dir)
-					out.FallbackPlan = &fb
+					if cmd, applied := localCommandWithDir(opts, cand, dir); applied {
+						fb.Command = cmd
+						out.FallbackPlan = &fb
+					} else {
+						out.FallbackPlan = nil
+						out.Fallback = "指定目录时不可降级到本地包（配方未声明本地目录参数）"
+					}
 				}
 				return out
 			}
@@ -764,7 +769,8 @@ func installerResolver(opts Options, recipeIdx int) func(Item, string) Item {
 		out.Fallback = "失败即停止并保留已装部分（D11）"
 		out.Candidates = nil
 		out.CandidateKind = ""
-		out.InstallDirSupported = opts.Recipes[recipeIdx].InstallDirArg != ""
+		// 当前版本不支持 select{installer} 与 set_location 组合。
+		out.InstallDirSupported = false
 		return out
 	}
 }
@@ -827,15 +833,19 @@ func fillLocalWithDir(it *Item, opts Options, c candidate, dir string) {
 	}
 }
 
-// localCommandWithDir 返回本地安装包在指定目录下的命令，供 winget 降级方案复用。
-func localCommandWithDir(opts Options, c candidate, dir string) string {
+// localCommandWithDir 返回本地安装包在指定目录下的命令，以及目录是否真的应用了。
+// dir 非空但配方没有本地目录参数时返回 ("", false)，调用方必须禁用降级。
+func localCommandWithDir(opts Options, c candidate, dir string) (string, bool) {
 	r := opts.Recipes[c.recipeIdx]
+	if dir != "" && r.InstallDirArg == "" {
+		return "", false
+	}
 	path := filepath.Join(opts.InstallerDir, c.file)
 	args := r.SilentArgs
 	if extra := applyInstallDir(r.InstallDirArg, dir); extra != "" {
 		args = strings.TrimSpace(args + " " + extra)
 	}
-	return opts.Expand(fmt.Sprintf(`"%s" %s`, path, args))
+	return opts.Expand(fmt.Sprintf(`"%s" %s`, path, args)), true
 }
 
 // localLocationResolver 返回「本地包条目 + 安装目录」的命令重算闭包。
@@ -844,7 +854,9 @@ func localLocationResolver(opts Options, c candidate) func(Item, string) Item {
 		out := old
 		out.InstallDir = dir
 		out.InstallDirApplied = dir != ""
-		out.Command = localCommandWithDir(opts, c, dir)
+		if cmd, applied := localCommandWithDir(opts, c, dir); applied {
+			out.Command = cmd
+		}
 		return out
 	}
 }

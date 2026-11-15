@@ -796,7 +796,8 @@ func (p *Plan) recipeResolver(opts Options, byRecipe map[int][]string) func(Item
 		default:
 			out.Tier = TierLocal
 			fillLocal(&out, opts, candidate{recipeIdx: idx, file: files[0]})
-			out.InstallDirSupported = r.InstallDirArg != ""
+			// 当前版本不支持 select{recipe} 与 set_location 组合。
+			out.InstallDirSupported = false
 			out.Fallback = "失败即停止并保留已装部分（D11）"
 		}
 		return out

@@ -180,6 +180,9 @@ func TestDecisionSelectInstaller(t *testing.T) {
 	if gi.CandidateKind != "" || len(gi.Candidates) != 0 {
 		t.Error("选完以后不应再挂候选")
 	}
+	if gi.InstallDirSupported {
+		t.Error("选安装包后不应宣称支持安装目录（当前版本不支持组合）")
+	}
 }
 
 // 配方歧义：select{recipe} 指定其中一个配方（A2 补的参数）。
@@ -240,6 +243,9 @@ func TestDecisionSelectRecipe(t *testing.T) {
 	}
 	if gi.Decision != ActionSelect {
 		t.Errorf("决策徽章缺失: %q", gi.Decision)
+	}
+	if gi.InstallDirSupported {
+		t.Error("选配方后不应宣称支持安装目录（当前版本不支持组合）")
 	}
 
 	// 选没有安装包的配方 → manual，但不再是歧义
@@ -315,6 +321,32 @@ func TestSetLocationWingetRewritesCommandAndFallback(t *testing.T) {
 	}
 	if gi.FallbackPlan.InstallDir != `D:\Apps\App` {
 		t.Errorf("降级方案应记录安装目录: %+v", gi.FallbackPlan)
+	}
+}
+
+// winget 失败后若本地配方没有目录参数，必须禁用降级，避免静默装到默认目录。
+func TestSetLocationWingetDisablesFallbackWithoutLocalDir(t *testing.T) {
+	cfg := baseConfig()
+	cfg.Software = []config.Software{software("Node", "22.0.0", "OpenJS.NodeJS")}
+	r := recipe("node", "node-*.msi", "/qn")
+	r.Aliases = []string{"node"}
+	r.WingetIDs = []string{"OpenJS.NodeJS"}
+	r.WingetLocationArg = `--location "{install_dir}"`
+	// 故意提供可匹配的本地包，但没有 InstallDirArg。
+	o := testOptions(cfg, okTarget(), []string{"node-22.msi"}, []config.Installer{r})
+	base := mustBuild(t, o)
+	if base.Items[0].FallbackPlan == nil {
+		t.Fatal("前置条件：winget 条目应有本地降级方案")
+	}
+
+	got := mustBuildDec(t, o, Decisions{{TargetID: base.Items[0].TargetID, Kind: DecKindSoftware,
+		Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps\Node`)}}})
+	it := got.Items[0]
+	if it.FallbackPlan != nil {
+		t.Errorf("本地降级无法应用目录时不应保留可执行 FallbackPlan: %+v", it.FallbackPlan)
+	}
+	if !strings.Contains(it.Fallback, "不可降级到本地包") {
+		t.Errorf("Fallback 文案应说明禁用原因: %q", it.Fallback)
 	}
 }
 
