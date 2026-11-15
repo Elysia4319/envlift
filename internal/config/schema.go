@@ -218,6 +218,11 @@ func (c *Config) validate() error {
 		if err := validateInstallDirTemplate(ins.WingetLocationArg); err != "" {
 			return fmt.Errorf("installers[%d](%s).winget_location_arg %s", i, ins.Name, err)
 		}
+		if (ins.InstallDirArg != "" || ins.WingetLocationArg != "") &&
+			strings.TrimSpace(ins.InstallDirSource) == "" {
+			return fmt.Errorf("installers[%d](%s).install_dir_source 不能为空（已声明 install_dir_arg 或 winget_location_arg）",
+				i, ins.Name)
+		}
 	}
 	return nil
 }

@@ -866,6 +866,8 @@
     if (it.status === 'blocked-needs-decision') { return true; }
     if (it.decision) { return true; }
     if (it.status === 'covered' && it.recipe) { return true; }
+    if (it.status === 'planned' && it.install_dir_supported &&
+        (it.tier === 'local' || it.tier === 'winget')) { return true; }
     return false;
   }
 
@@ -930,7 +932,9 @@
       + (dirOk ? '' : ' disabled') + ' aria-label="安装目录"></label>'
       + '<button class="btn btn-ghost btn-sm dec-apply-dir" type="button"'
       + (dirOk ? '' : ' disabled') + '>指定目录</button>'
-      + (dirOk ? '' : '<span class="hint">该配方不支持指定安装目录</span>');
+      + (dirOk ? '' : '<span class="hint">'
+        + (it.decision === 'select' ? '当前版本不支持与选包/选配方组合' : '该配方不支持指定安装目录')
+        + '</span>');
 
     html += '<button class="btn btn-ghost btn-sm dec-act" data-action="skip" type="button">跳过</button>'
       + '<button class="btn btn-ghost btn-sm dec-act" data-action="mark_manual" type="button">转人工</button>'

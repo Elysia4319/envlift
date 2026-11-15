@@ -135,7 +135,7 @@ func TestFrontendDoesNotBuildCommands(t *testing.T) {
 func TestDecisionInstallDirControls(t *testing.T) {
 	js := staticFiles(t)["app.js"]
 	for _, want := range []string{"dec-installdir", "dec-apply-dir",
-		"action: 'set_location'", "install_dir"} {
+		"action: 'set_location'", "install_dir", "当前版本不支持与选包/选配方组合"} {
 		if !strings.Contains(js, want) {
 			t.Errorf("app.js 缺少安装目录控件或参数: %q", want)
 		}

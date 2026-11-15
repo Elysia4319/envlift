@@ -14,7 +14,14 @@ func installerWithDirArgs(name, installDirArg, wingetArg string) Installer {
 		Source:            InstallerBuiltin,
 		InstallDirArg:     installDirArg,
 		WingetLocationArg: wingetArg,
+		InstallDirSource:  "test source",
 	}
+}
+
+func installerWithoutSource(name, installDirArg, wingetArg string) Installer {
+	ins := installerWithDirArgs(name, installDirArg, wingetArg)
+	ins.InstallDirSource = ""
+	return ins
 }
 
 func TestValidateInstallDirTemplates(t *testing.T) {
@@ -47,6 +54,11 @@ func TestValidateInstallDirTemplates(t *testing.T) {
 			name:    "control character is rejected",
 			ins:     installerWithDirArgs("control", "/DIR={install_dir}\x01", ""),
 			wantErr: "控制字符",
+		},
+		{
+			name:    "source is required",
+			ins:     installerWithoutSource("no-source", `/DIR="{install_dir}"`, ""),
+			wantErr: "install_dir_source",
 		},
 	}
 	for _, c := range cases {
