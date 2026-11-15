@@ -213,6 +213,9 @@ func Build(in Input, now time.Time) *Document {
 			WingetOK: p.Target.WingetOK, NetworkOK: p.Target.NetworkOK, Elevated: p.Target.Elevated,
 		}
 		doc.Warnings = append(doc.Warnings, p.Warnings...)
+		if in.Apply != nil {
+			doc.Warnings = append(doc.Warnings, in.Apply.Warnings...)
+		}
 		doc.Items = buildItems(p, in.Steps)
 		doc.PathChanges = buildPathResults(p)
 		if p.Blocked != "" {
@@ -265,6 +268,7 @@ func buildItems(p *plan.Plan, steps []apply.Step) []ItemResult {
 			ManualHint:           it.ManualHint,
 			InstallDir:           it.InstallDir,
 			InstallDirApplied:    it.InstallDirApplied,
+			InstallDirVerified:   it.InstallDirVerified,
 			Reinstall:            it.Reinstall,
 			VerifyCommandPresent: it.VerifyCmd != "",
 		}

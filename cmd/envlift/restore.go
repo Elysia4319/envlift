@@ -19,6 +19,7 @@ import (
 	"github.com/Elysia4319/envlift/internal/pathmgmt"
 	"github.com/Elysia4319/envlift/internal/plan"
 	"github.com/Elysia4319/envlift/internal/probe"
+	"github.com/Elysia4319/envlift/internal/relocation"
 	"github.com/Elysia4319/envlift/internal/report"
 	"github.com/Elysia4319/envlift/internal/scan"
 	"github.com/Elysia4319/envlift/internal/sysinfo"
@@ -44,6 +45,7 @@ func runRestore(args []string) int {
 	rollback := fs.Bool("rollback", false, "把 PATH 回滚到 journal 里的快照")
 	journalPath := fs.String("journal", "", "指定 journal 文件（回滚用，缺省取 reports/ 下最新）")
 	decisionsPath := fs.String("decisions", "", "决策文件（缺省读配置同目录的 envlift.decisions.yaml，存在则加载）")
+	relocationsPath := fs.String("relocations", relocation.DefaultPath, "重装账本路径")
 	if err := fs.Parse(args); err != nil {
 		return exitError
 	}
@@ -120,6 +122,11 @@ func runRestore(args []string) int {
 		fmt.Fprintf(os.Stderr, "决策文件 %s 不存在或为空；--decisions 明确指定时不允许当成「没有决策」。\n", decPath)
 		return exitError
 	}
+	ledger, ledgerErr := relocation.Load(*relocationsPath)
+	if ledgerErr != nil {
+		fmt.Fprintf(os.Stderr, "警告: %v（按空账本继续）\n", ledgerErr)
+		ledger = relocation.New()
+	}
 
 	p, err := plan.Build(plan.Options{
 		Config:         cfg,
@@ -133,6 +140,7 @@ func runRestore(args []string) int {
 		ExpandVars:     pathenv.ExpandVars,
 		RawConfig:      rawMode,
 		Decisions:      ds,
+		Relocations:    ledger,
 	})
 	if err != nil {
 		var derr *plan.DecisionErrors
@@ -149,6 +157,9 @@ func runRestore(args []string) int {
 		}
 		fmt.Fprintf(os.Stderr, "生成计划失败: %v\n", err)
 		return exitError
+	}
+	if ledgerErr != nil {
+		p.Warnings = append(p.Warnings, "重装账本读取失败，按空账本继续: "+ledgerErr.Error())
 	}
 
 	renderPlan(os.Stdout, p, *cfgPath, *installerDir)
@@ -175,7 +186,7 @@ func runRestore(args []string) int {
 	}
 
 	if *apply {
-		return doApply(p, env, *cfgPath, *journalDir, *yes, ds, newPrompter(os.Stdin, os.Stdout))
+		return doApply(p, env, *cfgPath, *journalDir, *yes, ds, ledger, *relocationsPath, newPrompter(os.Stdin, os.Stdout))
 	}
 
 	if *writeReport {
@@ -469,7 +480,8 @@ func verifyText(cmd, expect string) string {
 }
 
 // doApply 执行计划。C1：独立于 dry-run 的二次确认，--yes 不能绕过它。
-func doApply(p *plan.Plan, env *scan.Environment, cfgPath, journalDir string, yes bool, ds plan.Decisions, pr *prompter) int {
+func doApply(p *plan.Plan, env *scan.Environment, cfgPath, journalDir string, yes bool, ds plan.Decisions,
+	ledger *relocation.Ledger, relocationsPath string, pr *prompter) int {
 	if p.IsBlocked() {
 		fmt.Fprintf(os.Stderr, "计划被阻止，不能执行: %s\n", p.Blocked)
 		return exitRefused
@@ -518,14 +530,16 @@ func doApply(p *plan.Plan, env *scan.Environment, cfgPath, journalDir string, ye
 	fmt.Printf("事务日志: %s\n\n", j.Path())
 
 	res, err := apply.Run(apply.Options{
-		Plan:      p,
-		Journal:   j,
-		Exec:      apply.NewExecutor(),
-		Paths:     pathmgmt.New(),
-		Locations: apply.NewRegistryLocationReader(),
-		Out:       os.Stdout,
-		Elevated:  env.Info.Elevated,
-		Confirm:   pr.confirm,
+		Plan:           p,
+		Journal:        j,
+		Exec:           apply.NewExecutor(),
+		Paths:          pathmgmt.New(),
+		Locations:      apply.NewRegistryLocationReader(),
+		Relocations:    ledger,
+		RelocationPath: relocationsPath,
+		Out:            os.Stdout,
+		Elevated:       env.Info.Elevated,
+		Confirm:        pr.confirm,
 		Preflight: func() (bool, bool, string) {
 			ok, note := probeNetwork(3 * time.Second)
 			return env.Info.WingetAvailable, ok, note

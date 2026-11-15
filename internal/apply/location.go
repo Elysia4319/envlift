@@ -11,6 +11,11 @@ type LocationReader interface {
 	InstallLocation(name string) (string, bool, error)
 }
 
+// LocationCandidateReader 返回同名软件的全部 InstallLocation 候选。
+type LocationCandidateReader interface {
+	InstallLocations(name string) ([]string, error)
+}
+
 // RegistryLocationReader 从 Uninstall 键读取 InstallLocation。
 type RegistryLocationReader struct {
 	tree winreg.Tree
@@ -34,7 +39,20 @@ var locationTargets = []struct {
 
 // InstallLocation 按 DisplayName 精确（忽略大小写与首尾空白）匹配一条卸载记录。
 func (r *RegistryLocationReader) InstallLocation(name string) (string, bool, error) {
+	locs, err := r.InstallLocations(name)
+	if err != nil {
+		return "", false, err
+	}
+	if len(locs) == 1 {
+		return locs[0], true, nil
+	}
+	return "", false, nil
+}
+
+// InstallLocations 返回所有同名候选；调用方遇到多个候选时必须标 unverified，不能取第一条。
+func (r *RegistryLocationReader) InstallLocations(name string) ([]string, error) {
 	want := strings.TrimSpace(name)
+	var out []string
 	for _, t := range locationTargets {
 		subs, err := r.tree.SubKeys(t.hive, uninstallKey, t.view)
 		if err != nil {
@@ -49,8 +67,10 @@ func (r *RegistryLocationReader) InstallLocation(name string) (string, bool, err
 			if !strings.EqualFold(strings.TrimSpace(vals.Str["DisplayName"]), want) {
 				continue
 			}
-			return strings.TrimSpace(vals.Str["InstallLocation"]), true, nil
+			if loc := strings.TrimSpace(vals.Str["InstallLocation"]); loc != "" {
+				out = append(out, loc)
+			}
 		}
 	}
-	return "", false, nil
+	return out, nil
 }

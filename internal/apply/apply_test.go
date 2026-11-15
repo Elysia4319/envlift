@@ -12,6 +12,7 @@ import (
 
 	"github.com/Elysia4319/envlift/internal/pathmgmt"
 	"github.com/Elysia4319/envlift/internal/plan"
+	"github.com/Elysia4319/envlift/internal/relocation"
 )
 
 // C8：全部用假执行器与假 PATH 管理器，单测不装任何软件、不改本机 PATH。
@@ -29,6 +30,21 @@ type fakeLocations struct {
 
 func (f fakeLocations) InstallLocation(string) (string, bool, error) {
 	return f.loc, f.found, f.err
+}
+
+type fakeLocationCandidates struct {
+	locs []string
+}
+
+func (f fakeLocationCandidates) InstallLocation(string) (string, bool, error) {
+	if len(f.locs) == 1 {
+		return f.locs[0], true, nil
+	}
+	return "", false, nil
+}
+
+func (f fakeLocationCandidates) InstallLocations(string) ([]string, error) {
+	return f.locs, nil
 }
 
 func (f *fakeExec) Run(_ context.Context, command string, _ time.Duration) ExecResult {
@@ -213,6 +229,170 @@ func TestApplyVerifiesInstallDir(t *testing.T) {
 				t.Errorf("Step 输出应包含 %q: %q", c.output, st.Output)
 			}
 		})
+	}
+}
+
+func TestApplyRuntimeInstallDirIsUnverified(t *testing.T) {
+	p := testPlan(plan.Item{
+		Kind: "runtime", Name: "node", Status: plan.StatusPlanned, Tier: plan.TierLocal,
+		Command: "install-node", InstallDir: `D:\Apps\node`,
+		InstallDirApplied: true, Reinstall: true,
+	})
+	o := baseOpts(t, p, &fakeExec{}, &fakePaths{})
+	o.Locations = fakeLocations{loc: `D:\Apps\node`, found: true}
+	if _, err := Run(o); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadJournal(o.Journal.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := loaded.Steps[0]
+	if st.InstallDirVerified || !strings.Contains(st.Output, "runtime 目录验证暂不支持") {
+		t.Errorf("runtime 应标未验证: %+v", st)
+	}
+}
+
+func TestApplyAmbiguousInstallDirIsUnverified(t *testing.T) {
+	p := testPlan(plan.Item{
+		Kind: "software", Name: "Git", Status: plan.StatusPlanned, Tier: plan.TierLocal,
+		Command: "install-git", InstallDir: `D:\Apps\Git`,
+		InstallDirApplied: true, Reinstall: true,
+	})
+	o := baseOpts(t, p, &fakeExec{}, &fakePaths{})
+	o.Locations = fakeLocationCandidates{locs: []string{`D:\Apps\Git`, `C:\Apps\Git`}}
+	if _, err := Run(o); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadJournal(o.Journal.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := loaded.Steps[0]
+	if st.InstallDirVerified || !strings.Contains(st.InstallDirActual, " | ") {
+		t.Errorf("同名多候选应标 unverified + 候选: %+v", st)
+	}
+}
+
+func TestApplyWritesRelocationLedger(t *testing.T) {
+	path := filepath.Join(t.TempDir(), relocation.DefaultPath)
+	p := testPlan(plan.Item{
+		TargetID: "a1", Kind: "software", Name: "Git", Status: plan.StatusPlanned,
+		Tier: plan.TierLocal, Command: "install-git", InstallDir: `D:\Apps\Git`,
+		InstallDirApplied: true, Reinstall: true,
+	})
+	o := baseOpts(t, p, &fakeExec{}, &fakePaths{})
+	o.Locations = fakeLocations{loc: `D:\Apps\Git`, found: true}
+	o.Relocations = relocation.New()
+	o.RelocationPath = path
+
+	if _, err := Run(o); err != nil {
+		t.Fatalf("Run 失败: %v", err)
+	}
+	l, err := relocation.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, ok := l.Find("a1", `d:/apps/git/`)
+	if !ok || !e.Verified || e.LastCommand != "install-git" {
+		t.Fatalf("账本记录不对: %+v / %v", e, ok)
+	}
+}
+
+func TestApplyFailureDoesNotWriteRelocationLedger(t *testing.T) {
+	path := filepath.Join(t.TempDir(), relocation.DefaultPath)
+	p := testPlan(plan.Item{
+		TargetID: "a1", Kind: "software", Name: "Git", Status: plan.StatusPlanned,
+		Tier: plan.TierLocal, Command: "install-git", InstallDir: `D:\Apps\Git`,
+		InstallDirApplied: true, Reinstall: true,
+	})
+	ex := &fakeExec{results: map[string]ExecResult{"install-git": {ExitCode: 1, Output: "boom"}}}
+	o := baseOpts(t, p, ex, &fakePaths{})
+	o.Locations = fakeLocations{loc: `D:\Apps\Git`, found: true}
+	o.Relocations = relocation.New()
+	o.RelocationPath = path
+	if _, err := Run(o); err != nil {
+		t.Fatalf("Run 失败: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("失败不应写账本，stat err=%v", err)
+	}
+}
+
+func TestApplyExpectRebootWritesRelocationLedger(t *testing.T) {
+	path := filepath.Join(t.TempDir(), relocation.DefaultPath)
+	p := testPlan(plan.Item{
+		TargetID: "a1", Kind: "software", Name: "Git", Status: plan.StatusPlanned,
+		Tier: plan.TierLocal, Command: "install-git", InstallDir: `D:\Apps\Git`,
+		InstallDirApplied: true, Reinstall: true, ExpectReboot: true,
+	})
+	o := baseOpts(t, p, &fakeExec{}, &fakePaths{})
+	o.Locations = fakeLocations{loc: `D:\Apps\Git`, found: true}
+	o.Relocations = relocation.New()
+	o.RelocationPath = path
+	res, err := Run(o)
+	if err != nil {
+		t.Fatalf("Run 失败: %v", err)
+	}
+	if !strings.Contains(res.Stopped, "重启") {
+		t.Fatalf("应停在重启: %+v", res)
+	}
+	l, err := relocation.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := l.Find("a1", `D:\Apps\Git`); !ok {
+		t.Fatal("expect_reboot 成功后应先写账本")
+	}
+}
+
+func TestApplySecondRunSkipsWhenLedgerMatch(t *testing.T) {
+	p := testPlan(plan.Item{
+		TargetID: "a1", Kind: "software", Name: "Git", Status: plan.StatusPlanned,
+		Tier: plan.TierLocal, Command: "install-git", VerifyCmd: "git --version",
+		VerifyExpect: "git version", InstallDir: `D:\Apps\Git`,
+		InstallDirApplied: true, Reinstall: false,
+	})
+	ex := &fakeExec{results: map[string]ExecResult{"git --version": {ExitCode: 0, Output: "git version 2.56.0"}}}
+	o := baseOpts(t, p, ex, &fakePaths{})
+	o.Locations = fakeLocations{loc: `D:\Apps\Git`, found: true}
+	o.Relocations = relocation.New()
+	o.RelocationPath = filepath.Join(t.TempDir(), relocation.DefaultPath)
+	res, err := Run(o)
+	if err != nil {
+		t.Fatalf("Run 失败: %v", err)
+	}
+	if res.Skipped != 1 || res.Executed != 0 {
+		t.Fatalf("第二次 apply 应跳过: %+v", res)
+	}
+	for _, c := range ex.calls {
+		if c == "install-git" {
+			t.Error("账本命中且 verify 通过时不应重装")
+		}
+	}
+}
+
+func TestApplyLedgerWriteFailureDoesNotFailInstall(t *testing.T) {
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p := testPlan(plan.Item{
+		TargetID: "a1", Kind: "software", Name: "Git", Status: plan.StatusPlanned,
+		Tier: plan.TierLocal, Command: "install-git", InstallDir: `D:\Apps\Git`,
+		InstallDirApplied: true, Reinstall: true,
+	})
+	o := baseOpts(t, p, &fakeExec{}, &fakePaths{})
+	o.Locations = fakeLocations{loc: `D:\Apps\Git`, found: true}
+	o.Relocations = relocation.New()
+	o.RelocationPath = filepath.Join(blocker, "ledger.yaml")
+	res, err := Run(o)
+	if err != nil {
+		t.Fatalf("账本写入失败不应让安装失败: %v", err)
+	}
+	if res.Executed != 1 || len(res.Warnings) == 0 || !strings.Contains(res.Warnings[0], "写入重装账本失败") {
+		t.Fatalf("应成功安装并产生账本 warning: %+v", res)
 	}
 }
 

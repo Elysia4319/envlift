@@ -27,6 +27,7 @@ import (
 	"github.com/Elysia4319/envlift/internal/plan"
 	"github.com/Elysia4319/envlift/internal/probe"
 	"github.com/Elysia4319/envlift/internal/recipes"
+	"github.com/Elysia4319/envlift/internal/relocation"
 	"github.com/Elysia4319/envlift/internal/report"
 	"github.com/Elysia4319/envlift/internal/scan"
 	"github.com/Elysia4319/envlift/internal/softscan"
@@ -47,6 +48,8 @@ type Config struct {
 	ScanTimeout  time.Duration
 	// DecisionsPath 是 envlift.decisions.yaml 的路径；留空则取配置同目录。
 	DecisionsPath string
+	// RelocationPath 是重装账本路径；留空则使用工作目录默认值。
+	RelocationPath string
 }
 
 // Deps 装配出真实的 api.Deps。
@@ -359,7 +362,11 @@ func buildPlan(c Config, cfg *config.Config, rawDecisions json.RawMessage) (*pla
 	absDir, _ := filepath.Abs(c.InstallerDir)
 	red := config.NewRedactor(env.Info.Username, env.Info.Hostname)
 
-	return plan.Build(plan.Options{
+	ledger, ledgerErr := relocation.Load(relocationPath(c))
+	if ledgerErr != nil {
+		ledger = relocation.New()
+	}
+	p, err := plan.Build(plan.Options{
 		Config:         cfg,
 		Target:         target,
 		InstallerDir:   absDir,
@@ -371,7 +378,15 @@ func buildPlan(c Config, cfg *config.Config, rawDecisions json.RawMessage) (*pla
 		ExpandVars:     expandVars,
 		RawConfig:      plan.DetectRaw(cfg),
 		Decisions:      ds,
+		Relocations:    ledger,
 	})
+	if err != nil {
+		return nil, err
+	}
+	if ledgerErr != nil {
+		p.Warnings = append(p.Warnings, "重装账本读取失败，按空账本继续: "+ledgerErr.Error())
+	}
+	return p, nil
 }
 
 func mergeRecipes(cfg *config.Config) []config.Installer {
@@ -403,14 +418,20 @@ func doApply(c Config, p *plan.Plan, conf api.Confirmations, rep task.Reporter) 
 		return nil, err
 	}
 
+	ledger, ledgerErr := relocation.Load(relocationPath(c))
+	if ledgerErr != nil {
+		ledger = relocation.New()
+	}
 	res, err := apply.Run(apply.Options{
-		Plan:      p,
-		Journal:   j,
-		Exec:      apply.NewExecutor(),
-		Paths:     pathmgmt.New(),
-		Locations: apply.NewRegistryLocationReader(),
-		Out:       logWriter{rep},
-		Elevated:  p.Target.Elevated,
+		Plan:           p,
+		Journal:        j,
+		Exec:           apply.NewExecutor(),
+		Paths:          pathmgmt.New(),
+		Locations:      apply.NewRegistryLocationReader(),
+		Relocations:    ledger,
+		RelocationPath: relocationPath(c),
+		Out:            logWriter{rep},
+		Elevated:       p.Target.Elevated,
 		// D15：skip_admin 由执行器统一阻止提权项，不靠这里的回调兜底。
 		SkipAdmin: conf.SkipAdmin(),
 		// C-2：需提权项必须在 admin_confirmed 里逐项出现，缺失即视为未确认。
@@ -431,6 +452,10 @@ func doApply(c Config, p *plan.Plan, conf api.Confirmations, rep task.Reporter) 
 	})
 	if err != nil {
 		return nil, err
+	}
+	if ledgerErr != nil {
+		res.Warnings = append(res.Warnings, "重装账本读取失败，按空账本继续: "+ledgerErr.Error())
+		rep.Log("warn", "重装账本读取失败，按空账本继续: "+ledgerErr.Error())
 	}
 
 	if _, _, rerr := report.Write(dir, report.Input{
@@ -559,6 +584,13 @@ func absOrSelf(p string) string {
 		return a
 	}
 	return p
+}
+
+func relocationPath(c Config) string {
+	if c.RelocationPath != "" {
+		return c.RelocationPath
+	}
+	return relocation.DefaultPath
 }
 
 func expandVars(s string) string { return pathenv.ExpandVars(s) }

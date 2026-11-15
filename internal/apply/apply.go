@@ -14,6 +14,7 @@ import (
 	"github.com/Elysia4319/envlift/internal/pathenv"
 	"github.com/Elysia4319/envlift/internal/pathmgmt"
 	"github.com/Elysia4319/envlift/internal/plan"
+	"github.com/Elysia4319/envlift/internal/relocation"
 )
 
 // 计划里的层级。
@@ -41,8 +42,11 @@ type Options struct {
 	Preflight func() (wingetOK, networkOK bool, note string)
 	// Locations 读取安装后的注册表 InstallLocation，用于验证目录落点。
 	Locations LocationReader
-	Timeout   time.Duration
-	Now       func() time.Time
+	// Relocations / RelocationPath 是本地重装账本与落盘路径。
+	Relocations    *relocation.Ledger
+	RelocationPath string
+	Timeout        time.Duration
+	Now            func() time.Time
 }
 
 // Result 是一次 apply 的汇总。
@@ -52,10 +56,11 @@ type Result struct {
 	Failed   int `json:"failed"`
 	Blocked  int `json:"blocked"`
 	// Undecided 是「因未决策被跳过」的条目数（C2：不阻断、不算失败）。
-	Undecided int    `json:"undecided"`
-	PathAdded int    `json:"path_added"`
-	Stopped   string `json:"stopped,omitempty"`
-	BakPath   string `json:"bak_path,omitempty"`
+	Undecided int      `json:"undecided"`
+	PathAdded int      `json:"path_added"`
+	Stopped   string   `json:"stopped,omitempty"`
+	BakPath   string   `json:"bak_path,omitempty"`
+	Warnings  []string `json:"warnings,omitempty"`
 }
 
 // Run 执行计划。
@@ -190,7 +195,7 @@ func Run(opts Options) (*Result, error) {
 
 		// C4.1/P1：先跑 verify 判断是否已完成，已完成就跳过，不重装。
 		// 指定安装目录是显式重装：verify 通过也不能跳过。
-		if it.Reinstall || it.InstallDirApplied {
+		if it.Reinstall {
 			fmt.Fprintf(opts.Out, "  [重装] %s —— 指定了安装目录，跳过幂等检查\n", it.Name)
 		} else if it.VerifyCmd != "" {
 			vr := opts.Exec.Run(context.Background(), it.VerifyCmd, 60*time.Second)
@@ -200,7 +205,8 @@ func Run(opts Options) (*Result, error) {
 				st := Step{
 					Index: i, Kind: it.Kind, Name: it.Name, Tier: it.Tier,
 					Command: it.VerifyCmd, Status: StepSkipped,
-					StartedAt: started, FinishedAt: opts.Now().Format(time.RFC3339),
+					InstallDirVerified: it.InstallDirVerified,
+					StartedAt:          started, FinishedAt: opts.Now().Format(time.RFC3339),
 					Output: "幂等检查：已完成",
 				}
 				if okVer {
@@ -282,6 +288,9 @@ func Run(opts Options) (*Result, error) {
 		if step.Status == StepOK && it.InstallDirApplied {
 			verifyInstallDir(opts, &step, it)
 		}
+		if step.Status == StepOK && it.InstallDirApplied {
+			recordRelocation(opts, res, it, step)
+		}
 		_ = opts.Journal.Append(step)
 
 		if step.Status == StepFailed {
@@ -316,13 +325,26 @@ func Run(opts Options) (*Result, error) {
 
 // verifyInstallDir 只验证目录落点，不把目录不一致升级成安装失败。
 func verifyInstallDir(opts Options, step *Step, it plan.Item) {
+	if it.Kind == "runtime" {
+		step.InstallDirVerified = false
+		step.Output = truncate(step.Output+"\n--- 安装目录验证 ---\nruntime 目录验证暂不支持", 2000)
+		fmt.Fprintf(opts.Out, "  [目录] %s —— 未验证（runtime 目录验证暂不支持）\n", it.Name)
+		return
+	}
 	if opts.Locations == nil {
 		step.InstallDirVerified = false
 		step.Output = truncate(step.Output+"\n--- 安装目录验证 ---\n未配置 LocationReader，无法读取 InstallLocation", 2000)
 		fmt.Fprintf(opts.Out, "  [目录] %s —— 未验证（未配置读取器）\n", it.Name)
 		return
 	}
-	actual, found, err := opts.Locations.InstallLocation(it.Name)
+	actual, found, err := readInstallLocation(opts.Locations, it.Name)
+	if len(actual) > 0 && strings.Contains(actual, " | ") {
+		step.InstallDirActual = actual
+		step.InstallDirVerified = false
+		step.Output = truncate(step.Output+"\n--- 安装目录验证 ---\n同名候选: "+actual, 2000)
+		fmt.Fprintf(opts.Out, "  [目录] %s —— 未验证（同名候选：%s）\n", it.Name, actual)
+		return
+	}
 	step.InstallDirActual = actual
 	switch {
 	case err != nil:
@@ -344,11 +366,46 @@ func verifyInstallDir(opts Options, step *Step, it plan.Item) {
 	}
 }
 
-func sameInstallDir(a, b string) bool {
-	norm := func(s string) string {
-		return strings.ToLower(strings.TrimRight(strings.TrimSpace(s), `\/`))
+func readInstallLocation(reader LocationReader, name string) (string, bool, error) {
+	if cr, ok := reader.(LocationCandidateReader); ok {
+		locs, err := cr.InstallLocations(name)
+		if err != nil {
+			return "", false, err
+		}
+		switch len(locs) {
+		case 0:
+			return "", false, nil
+		case 1:
+			return locs[0], true, nil
+		default:
+			return strings.Join(locs, " | "), false, nil
+		}
 	}
-	return norm(a) == norm(b)
+	return reader.InstallLocation(name)
+}
+
+func recordRelocation(opts Options, res *Result, it plan.Item, step Step) {
+	if opts.RelocationPath == "" {
+		return
+	}
+	ledger := opts.Relocations
+	if ledger == nil {
+		ledger = relocation.New()
+	}
+	ledger.Upsert(relocation.Entry{
+		TargetID: it.TargetID, InstallDir: it.InstallDir,
+		Verified: step.InstallDirVerified, CompletedAt: opts.Now().Format(time.RFC3339),
+		LastCommand: step.Command,
+	})
+	if err := relocation.Save(opts.RelocationPath, ledger); err != nil {
+		msg := "写入重装账本失败: " + err.Error()
+		res.Warnings = append(res.Warnings, msg)
+		fmt.Fprintf(opts.Out, "  警告: %s\n", msg)
+	}
+}
+
+func sameInstallDir(a, b string) bool {
+	return relocation.NormalizeDir(a) == relocation.NormalizeDir(b)
 }
 
 // collectPathValues 收集需要写入的 PATH 条目，按 section 分组。
