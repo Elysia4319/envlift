@@ -106,22 +106,22 @@
 ## 11. 安装目录与重装
 
 - [x] 本地 Inno/NSIS 包指定新目录，安装后注册表 `InstallLocation` 与目标目录一致。
-- [x] winget 包指定新目录，确认该包的 `--location` 是否被接受。
-- [x] winget 失败后本地降级：如果本地配方没有 `install_dir_arg`，确认不会静默装到默认目录。
+- [ ] winget 包指定新目录，确认该包的 `--location` 是否被接受。（场景 5 部分通过：直接 winget 确认落点；envlift apply 被 winget 源超时打断）
+- [ ] winget 失败后本地降级：如果本地配方没有 `install_dir_arg`，确认不会静默装到默认目录。（旧二进制历史通过，未用 alpha 复跑）
 - [x] 已安装软件设置新目录，确认进入重装而不是 `skipped`。
 - [x] 重装失败时报告能看出失败原因，不显示 `succeeded`。
 - [x] 确认报告在目录未验证时显示 `unverified`/实际目录，不显示成“已验证成功”。
 - [x] 连续两次 apply：第一次重装并写账本，第二次同目录不再重装。
-- [x] 账本 `verified=true` 但实际目录被移动：手工移动安装目录或改写注册表 `InstallLocation` 后重跑，
+- [ ] 账本 `verified=true` 但实际目录被移动：手工移动安装目录或改写注册表 `InstallLocation` 后重跑，
       确认打印“账本记录与实际不符，重新安装”并真正执行安装，而不是 `skipped`；重装后账本
-      `actual_dir` 更新为新目录。
-- [x] `InstallLocation` 读取失败（键损坏或权限不足）：确认不按账本跳过，执行安装并标 `unverified`。
-- [x] 同一软件同时出现在 HKLM64 / HKLM32 / HKCU 且指向同一路径：确认候选去重为 1 个；
-      指向不同路径时仍标 `unverified` 并列出候选。
+      `actual_dir` 更新为新目录。（旧二进制历史通过，未用 alpha 复跑）
+- [ ] `InstallLocation` 读取失败（键损坏或权限不足）：确认不按账本跳过，执行安装并标 `unverified`。（旧二进制历史通过，未用 alpha 复跑）
+- [ ] 同一软件同时出现在 HKLM64 / HKLM32 / HKCU 且指向同一路径：确认候选去重为 1 个；
+      指向不同路径时仍标 `unverified` 并列出候选。（旧二进制历史通过，未用 alpha 复跑）
 - [x] `expect_reboot` 第一次成功后写账本，重启后的第二次 apply 不重装。
 - [x] 修改安装目录后再次 apply，确认重新重装。
-- [x] 账本损坏/不可写：记录 warning，安装是否继续、是否重复重装的实际表现。
-- [ ] 记录限制：安装目录变更不提供自动卸载回滚；回滚只覆盖 PATH。
+- [ ] 账本损坏/不可写：记录 warning，安装是否继续、是否重复重装的实际表现。（旧二进制历史通过，未用 alpha 复跑）
+- [ ] 记录限制：安装目录变更不提供自动卸载回滚；回滚只覆盖 PATH。（未勾选：本轮未重跑 PATH 回滚）
 
 ### 2026-11-15 实测结果（安装目录，VM `envlift-vm-20261102`）
 
@@ -141,7 +141,8 @@
 | 12. 回滚限制 | 部分通过（旧二进制，非最终） | 安装目录-only journal 无 PATH 快照；7-Zip 仍安装 | PATH 回滚沿用 2026-11-03 F7 |
 | 13. 重装失败报告 | 通过（alpha） | `fail-setup.exe` 退出 1；报告 `status=failed`、failure_reason 可读；无账本 | 未出现 succeeded |
 
-> 本轮已勾选通过项；场景 11 与场景 12 的部分内容仍未验证。完整证据见
+> 只有场景 1–4、13 为 alpha 最终通过；场景 5 部分通过；场景 6–10 为旧二进制历史；
+> 场景 11 未验证；场景 12 部分通过。完整证据见
 > `docs/evidence/install-dir-20261115.md` 与 `docs/evidence/install-dir-20261115/`。
 > 第 124 行保持未勾选：安装目录变更不提供自动卸载回滚；PATH 回滚本轮未重跑，
 > 沿用 2026-11-03 F7 结果。

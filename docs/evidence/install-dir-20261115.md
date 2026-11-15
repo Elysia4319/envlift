@@ -57,14 +57,17 @@ go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=0.1.0-alpha" 
 | 3. 改目录第三次 apply | 通过（alpha） | 命令 `/D=C:\Apps\7zip2`；报告 verified=true；账本 `actual_dir=C:\Apps\7zip2\` | 同 target_id 账本更新 |
 | 4. expect_reboot | 通过（alpha） | 第一次停在“完成后需要重启”，exit 2 并写账本；重启后第二次 `skipped` | 无害 noop 安装器 |
 | 5. winget 包 | 部分通过（环境网络） | 命令含 `--location "C:\Apps\7zip-winget" --force`；直接 winget 安装成功且注册表落点为请求目录 | envlift apply 复跑两次均因 winget 源连接错误失败；旧二进制历史结果为 unverified |
-| 6. 降级目录丢失 | 通过 | `fallback_plan=null`；`fallback=指定目录时不可降级...`；无 `[降级]`；标记文件 `MARKER=NO` | winget 失败后没有静默装到默认目录 |
-| 7. 账本与实际不符 | 通过 | 篡改注册表后打印“账本记录与实际不符，重新安装”并执行安装；账本 `actual_dir` 更新 | 重装后 verified=true |
-| 8. InstallLocation 读取失败 | 通过（安全行为） | 拒绝读取假卸载键后未按账本跳过，执行安装并标 `unverified` | 读取错误被折叠为“未找到”，日志显示“不符”而非“读取失败” |
-| 9. 候选去重 | 通过 | 同路径重复键 -> 去重为 1 并 `skipped`；不同路径 -> `未验证（同名候选：...）` | 覆盖 HKLM/HKCU 同名候选 |
-| 10. 账本异常 | 通过 | 损坏 YAML/version>1 均 warning 并按空账本继续；账本不可写 warning 但安装继续 | 见 `apply-ledger-dir` 输出 |
+| 6. 降级目录丢失 | 历史通过（旧二进制，非最终） | `fallback_plan=null`；`fallback=指定目录时不可降级...`；无 `[降级]`；标记文件 `MARKER=NO` | 未用 alpha 复跑 |
+| 7. 账本与实际不符 | 历史通过（旧二进制，非最终） | 篡改注册表后打印“账本记录与实际不符，重新安装”并执行安装；账本 `actual_dir` 更新 | 未用 alpha 复跑 |
+| 8. InstallLocation 读取失败 | 历史通过（旧二进制，非最终） | 拒绝读取假卸载键后未按账本跳过，执行安装并标 `unverified` | 读取错误被折叠为“未找到” |
+| 9. 候选去重 | 历史通过（旧二进制，非最终） | 同路径重复键 -> 去重为 1 并 `skipped`；不同路径 -> `未验证（同名候选：...）` | 未用 alpha 复跑 |
+| 10. 账本异常 | 历史通过（旧二进制，非最终） | 损坏 YAML/version>1 均 warning 并按空账本继续；账本不可写 warning 但安装继续 | 未用 alpha 复跑 |
 | 11. 无 LocationReader | 未验证 | CLI 固定注入 `RegistryLocationReader`，无法在不改代码/API 的情况下关闭 | 单测已覆盖 `Locations=nil` |
-| 12. 回滚限制 | 部分通过 | 安装目录-only journal 无 PATH 快照，rollback 报错；7-Zip 仍安装 | PATH 回滚沿用 2026-11-03 F7 结果，本轮未重跑 |
+| 12. 回滚限制 | 部分通过（旧二进制，非最终） | 安装目录-only journal 无 PATH 快照，rollback 报错；7-Zip 仍安装 | PATH 回滚沿用 2026-11-03 F7 结果，本轮未重跑 |
 | 13. 重装失败报告 | 通过（alpha） | `fail-setup.exe` 退出 1；报告 `status=failed`、`failure_reason=simulated installer failure: exit 1`；无账本 | 未出现 `succeeded` |
+
+最终 alpha 验收通过项仅限场景 1–4 与 13；场景 5 部分通过；场景 6–10 为旧二进制历史结果；
+场景 11 未验证；场景 12 部分通过。
 
 ## 关键输出
 
