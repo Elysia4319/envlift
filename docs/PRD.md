@@ -493,7 +493,7 @@ envlift\
 | `match_display` | string | 对 DisplayName 的 Go RE2 正则，建议带 `(?i)` 并锚定 |
 | `install_dir_arg` | string | 本地安装包追加的目录参数模板，`{install_dir}` 表示用户选择的目录；空表示不支持 |
 | `winget_location_arg` | string | winget 追加的目录参数模板（如 `--location "{install_dir}"`）；空表示不支持 |
-| `install_dir_source` | string | 上述模板的依据：官方文档链接或本机 `--help` 实测；没有依据时留空 |
+| `install_dir_source` | string | 上述模板的依据：官方文档链接或本机 `--help` 实测；模板非空时必填 |
 
 ### 10.3 四级锚点（M2）
 
@@ -520,6 +520,10 @@ envlift\
 - 指定目录视为重装：即使 verify 已通过也继续执行安装；winget 重装命令追加 `--force`。
 - 若本机 winget 的 `install --help` 不含 `--force`，计划标 blocked，不猜测替代参数。
 - 当前版本不支持 `select{installer}` 与 `set_location` 组合；请先选安装包，再单独指定目录。
+- winget `--location` 是包级 best-effort，是否生效取决于包本身，必须 VM 验证。
+- winget 失败后若本地配方没有 `install_dir_arg`，不保留可执行降级方案，避免装到默认目录。
+- 安装目录变更不提供自动卸载回滚；回滚只覆盖 PATH。
+- 安装后读取注册表 `InstallLocation` 校验落点；读不到或不一致时报告标 `unverified`，不把安装判失败。
 
 ### 10.4 规范化（M3）
 
