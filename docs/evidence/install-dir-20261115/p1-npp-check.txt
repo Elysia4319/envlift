@@ -1,0 +1,4 @@
+﻿NPP_EXE=False
+PF_NPP=True
+PFX86_NPP=False
+ENTRY=Notepad++ (64-bit x64)|8.8.1|LOC=

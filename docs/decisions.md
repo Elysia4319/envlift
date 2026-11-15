@@ -387,5 +387,5 @@ token → 请求体结构 → `mode` → 加载配置并生成计划 → `admin_
 
 **原因**：`target_id` 是条目身份，必须跨机器、跨重跑稳定。把目录纳入哈希会让同一条软件在指定目录后变成另一个条目，已有决策、报告 diff 与排除引用全部失效。目录是本次执行的参数，不是软件身份的一部分。
 
-**边界**：只使用配方显式声明的 `install_dir_arg` / `winget_location_arg`；不设置目录时，计划、命令与报告保持原样。指定目录视为重装，跳过 verify 幂等检查；winget 重装要求本机支持 `--force`，否则计划 blocked。当前版本不支持 `select{installer}` 与 `set_location` 组合。重装成功后写入本地 `envlift.relocations.yaml`，同 target_id + 同归一化目录不再重复重装；账本不入库。账本同时保存 `install_dir` 与 `actual_dir`；`verified=true` 不永久信任，apply 跳过前会重新读取 `InstallLocation`，目录不一致或读取失败时继续安装并标 `unverified`。`InstallLocation` 候选先按归一化路径去重；账本 `version` 高于当前程序支持时拒绝读取。
+**边界**：只使用配方显式声明的 `install_dir_arg` / `winget_location_arg`；不设置目录时，计划、命令与报告保持原样。指定目录视为重装，跳过 verify 幂等检查；winget 重装要求本机支持 `--force`，否则计划 blocked。当前版本不支持 `select{installer}` 与 `set_location` 组合。重装成功后写入本地 `envlift.relocations.yaml`；同一 target_id + 归一化目录命中账本即跳过安装，不再依赖 verify。`verified=true` 不永久信任：apply 跳过前会重新读取 `InstallLocation`，目录不一致或读取失败时重新安装；`verified=false` 或无读取器时仍跳过，但报告必须标 `unverified`。账本同时保存 `install_dir` 与 `actual_dir`；账本不入库。`InstallLocation` 候选先按归一化路径去重；账本 `version` 高于当前程序支持时拒绝读取。
 

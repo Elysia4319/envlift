@@ -524,10 +524,10 @@ envlift\
 - winget 失败后若本地配方没有 `install_dir_arg`，不保留可执行降级方案，避免装到默认目录。
 - 安装目录变更不提供自动卸载回滚；回滚只覆盖 PATH。
 - 安装后读取注册表 `InstallLocation` 校验落点；读不到或不一致时报告标 `unverified`，不把安装判失败。
-- `set_location` 成功后写入本地 `envlift.relocations.yaml`；同一 target_id + 归一化目录再次出现时 `Reinstall=false`，由 verify 决定是否跳过。
+- `set_location` 成功后写入本地 `envlift.relocations.yaml`；同一 target_id + 归一化目录命中账本即跳过安装，不再依赖 verify。
 - 账本条目保存 `install_dir` 与 `actual_dir`；`actual_dir` 是安装后实测值，读不到时留空，不猜。
-- 账本 `verified=true` 只代表上次验证结果。apply 在跳过前重新读取 `InstallLocation`：与账本目录一致才允许跳过；不一致时打印“账本记录与实际不符，重新安装”并继续安装；读取失败时标 `unverified` 并继续安装。
-- 未配置 `LocationReader` 时允许按账本跳过，但报告必须标 `unverified` /“账本记录未复核”，不能显示成已验证。
+- 账本 `verified=true` 只代表上次验证结果。apply 在跳过前重新读取 `InstallLocation`：与账本目录一致才跳过；不一致时打印“账本记录与实际不符，重新安装”并重新安装；读取失败时也重新安装并标 `unverified`。
+- 账本 `verified=false` 或未配置 `LocationReader` 时仍按账本跳过，但报告必须标 `unverified` /“账本记录未验证/未复核”，不能显示成已验证。
 - 同名软件的 `InstallLocation` 候选按归一化路径去重，保留首个原始值；去重后仍有多个不同路径时标 `unverified` 并列出候选。
 - 账本 `version > 1` 时 `relocation.Load` 返回“账本版本高于本程序支持”，不静默读取。
 - 账本是本地状态，不入库；账本读取失败按空账本继续并 warning，写入失败不把安装判失败。

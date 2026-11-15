@@ -90,18 +90,19 @@ go install github.com/Elysia4319/envlift/cmd/envlift@latest
 
 - 软件识别率约 8%（18/221），内置配方 33 条；识别不出的条目会进入人工处理。
 - 部分配方的 `silent_args` 仍不完整，本地安装包层级可能不可用。
-- F6 的真实重启续跑尚未执行；状态机与幂等跳过已验证。
+- F6 的历史记录曾未执行真实重启；2026-11-15 alpha 场景 4 已真实重启并续跑，状态机与账本跳过已验证。
 - F8「缺 winget」是模拟场景，未真实卸载 App Installer。
 - 不要同时开两个实例；MVP 未做单实例检测。
-- 安装目录仅对配方显式声明参数的包生效；内置 Git / VS Code / Python / 7zip / Notepad++ 支持本地目录参数，Node / Go / PowerShell 目前仅支持 winget 目录参数。
+- 安装目录仅对配方显式声明参数的包生效；内置 7zip 本地目录参数已在 VM 验证。Git 与 Notepad++ 的本地目录参数在 VM 中未生效，不能宣称支持；VS Code / Python 未复验。Node / Go / PowerShell 目前仅支持 winget 目录参数。
+- Git 的 `/DIR` 后续需用官方 `/LOADINF` 方案验证；Notepad++ 的 `/D` 也需要重新确认安装包支持情况。
 - winget 的 `--location` 是包级 best-effort，是否真正生效取决于具体包，必须 VM 验证。
 - winget 失败后若本地配方没有 `install_dir_arg`，不会保留可执行降级方案，避免静默装到默认目录。
 - 指定目录会触发重装；winget 需要 `--force` 支持，否则计划会被阻止。
 - 当前版本不支持 `select{installer}` 与 `set_location` 组合。
 - 安装目录变更不提供自动卸载回滚；回滚只覆盖 PATH。
 - 安装后目录未验证时报告标 `unverified`，不会显示成“已验证成功”。
-- `set_location` 是一次性重装：成功后写入本地 `envlift.relocations.yaml`，后续 apply 不再重复重装；改目录或删除账本条目才会再次重装。
-- 账本同时保存请求目录 `install_dir` 与实测目录 `actual_dir`；`verified=true` 只代表上次结果，跳过前会重新读取 `InstallLocation`。目录被移动或读取失败时重新安装并标 `unverified`；没有读取器时按账本跳过，但报告标“账本记录未复核”。
+- `set_location` 成功后写入本地 `envlift.relocations.yaml`；同一 target_id + 归一化目录命中账本即跳过安装，不再依赖 verify。改目录或删除账本条目才会再次重装。
+- 账本同时保存请求目录 `install_dir` 与实测目录 `actual_dir`；`verified=true` 时跳过前会重新读取 `InstallLocation`，目录被移动或读取失败时重新安装并标 `unverified`。`verified=false` 或没有读取器时仍按账本跳过，但报告标“账本记录未验证/未复核”。
 - 同名软件的 `InstallLocation` 候选按归一化路径去重；仍有多个不同路径时标 `unverified` 并列出候选，不取第一条。
 - 账本 `version` 高于当前程序支持时拒绝读取，不按旧格式猜测。
 - 重装账本是本地状态，已被 `.gitignore` 忽略，不入库。
