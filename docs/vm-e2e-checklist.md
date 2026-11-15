@@ -4,7 +4,7 @@
 > 或误以为已经验过。
 > 本机（开发机）**永远不跑装软件的真实 apply**——本机装软件属于不可回滚的副作用。
 >
-> 配套文档：怎么改 / 怎么验 → `docs/workflow.md`；已锁定决策（D1–D22）→ `docs/decisions.md`。
+> 配套文档：怎么改 / 怎么验 → `docs/workflow.md`；已锁定决策（D1–D23）→ `docs/decisions.md`。
 
 ## 0. 环境准备
 

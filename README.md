@@ -93,13 +93,16 @@ go install github.com/Elysia4319/envlift/cmd/envlift@latest
 - F6 的真实重启续跑尚未执行；状态机与幂等跳过已验证。
 - F8「缺 winget」是模拟场景，未真实卸载 App Installer。
 - 不要同时开两个实例；MVP 未做单实例检测。
-- 安装目录仅对配方显式声明参数的包生效；winget 包需配方支持 --location。
+- 安装目录仅对配方显式声明参数的包生效；内置 Git / VS Code / Python / 7zip / Notepad++ 支持本地目录参数，Node / Go / PowerShell 目前仅支持 winget 目录参数。
+- winget 的 `--location` 是否真正生效取决于具体包；不支持时不要依赖目录参数。
+- 指定目录会触发重装；winget 需要 `--force` 支持，否则计划会被阻止。
+- 当前版本不支持 `select{installer}` 与 `set_location` 组合。
 - 这是 early alpha，接口、配置格式和 GUI 仍可能变化。
 
 ## 文档入口
 
 - [docs/workflow.md](docs/workflow.md)：开发、验证与禁止事项
-- [docs/decisions.md](docs/decisions.md)：已锁定决策（D1–D22）
+- [docs/decisions.md](docs/decisions.md)：已锁定决策（D1–D23）
 - [docs/PRD.md](docs/PRD.md)：命令、schema 与路由规格
 - [docs/vm-e2e-checklist.md](docs/vm-e2e-checklist.md)：VM 验证清单与已验范围
 - [SECURITY.md](SECURITY.md)：信任模型与漏洞报告
