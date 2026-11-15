@@ -372,6 +372,138 @@ func TestApplySecondRunSkipsWhenLedgerMatch(t *testing.T) {
 	}
 }
 
+// 账本 verified 不能永久信任：跳过前必须按当前 InstallLocation 复核。
+func TestApplyRechecksVerifiedLedgerBeforeSkipping(t *testing.T) {
+	cases := []struct {
+		name     string
+		reader   LocationReader
+		skipped  int
+		executed int
+		verified bool
+		wantLog  string
+	}{
+		{
+			name: "same-dir", reader: fakeLocations{loc: `D:\Apps\Git`, found: true},
+			skipped: 1, verified: true,
+		},
+		{
+			name: "moved-dir", reader: fakeLocations{loc: `D:\Moved\Git`, found: true},
+			executed: 1, verified: false, wantLog: "账本记录与实际不符，重新安装",
+		},
+		{
+			name: "read-failed", reader: fakeLocations{err: errors.New("拒绝访问")},
+			executed: 1, verified: false, wantLog: "账本记录未复核（读取失败），重新安装",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := testPlan(plan.Item{
+				TargetID: "a1", Kind: "software", Name: "Git", Status: plan.StatusPlanned,
+				Tier: plan.TierLocal, Command: "install-git", VerifyCmd: "git --version",
+				VerifyExpect: "git version", InstallDir: `D:\Apps\Git`,
+				InstallDirApplied: true, InstallDirVerified: true,
+			})
+			ex := &fakeExec{results: map[string]ExecResult{
+				"git --version": {ExitCode: 0, Output: "git version 2.56.0"},
+				"install-git":   {ExitCode: 0, Output: "installed"},
+			}}
+			var out bytes.Buffer
+			o := baseOpts(t, p, ex, &fakePaths{})
+			o.Out = &out
+			o.Locations = c.reader
+			o.Relocations = relocation.New()
+			o.RelocationPath = filepath.Join(t.TempDir(), relocation.DefaultPath)
+
+			res, err := Run(o)
+			if err != nil {
+				t.Fatalf("Run 失败: %v", err)
+			}
+			if res.Skipped != c.skipped || res.Executed != c.executed {
+				t.Fatalf("结果不符: %+v", res)
+			}
+			if c.wantLog != "" && !strings.Contains(out.String(), c.wantLog) {
+				t.Errorf("缺少复核日志 %q: %s", c.wantLog, out.String())
+			}
+			loaded, err := LoadJournal(o.Journal.Path())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(loaded.Steps) != 1 {
+				t.Fatalf("steps = %d", len(loaded.Steps))
+			}
+			if loaded.Steps[0].InstallDirVerified != c.verified {
+				t.Errorf("目录验证状态 = %v，期望 %v: %+v",
+					loaded.Steps[0].InstallDirVerified, c.verified, loaded.Steps[0])
+			}
+		})
+	}
+}
+
+// 没有 LocationReader 时允许按账本跳过，但报告不能写成已验证。
+func TestApplyLedgerSkipWithoutReaderIsUnverified(t *testing.T) {
+	p := testPlan(plan.Item{
+		TargetID: "a1", Kind: "software", Name: "Git", Status: plan.StatusPlanned,
+		Tier: plan.TierLocal, Command: "install-git", VerifyCmd: "git --version",
+		VerifyExpect: "git version", InstallDir: `D:\Apps\Git`,
+		InstallDirApplied: true, InstallDirVerified: true,
+	})
+	ex := &fakeExec{results: map[string]ExecResult{
+		"git --version": {ExitCode: 0, Output: "git version 2.56.0"},
+	}}
+	var out bytes.Buffer
+	o := baseOpts(t, p, ex, &fakePaths{})
+	o.Out = &out
+	o.Relocations = relocation.New()
+	o.RelocationPath = filepath.Join(t.TempDir(), relocation.DefaultPath)
+
+	res, err := Run(o)
+	if err != nil {
+		t.Fatalf("Run 失败: %v", err)
+	}
+	if res.Skipped != 1 || res.Executed != 0 {
+		t.Fatalf("账本命中且无读取器时应允许跳过: %+v", res)
+	}
+	loaded, err := LoadJournal(o.Journal.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := loaded.Steps[0]
+	if st.InstallDirVerified || !strings.Contains(st.Output, "账本记录未复核") {
+		t.Errorf("无读取器时报告应标未复核: %+v", st)
+	}
+}
+
+// Run 内初始化的账本必须在整个批次复用；否则每个条目都会覆盖成最后一条。
+func TestApplyKeepsMultipleLedgerEntries(t *testing.T) {
+	path := filepath.Join(t.TempDir(), relocation.DefaultPath)
+	p := testPlan(
+		plan.Item{
+			TargetID: "a1", Kind: "software", Name: "Git", Status: plan.StatusPlanned,
+			Tier: plan.TierLocal, Command: "install-git", InstallDir: `D:\Apps\Git`,
+			InstallDirApplied: true, Reinstall: true,
+		},
+		plan.Item{
+			TargetID: "a2", Kind: "software", Name: "Node", Status: plan.StatusPlanned,
+			Tier: plan.TierLocal, Command: "install-node", InstallDir: `D:\Apps\node`,
+			InstallDirApplied: true, Reinstall: true,
+		},
+	)
+	o := baseOpts(t, p, &fakeExec{}, &fakePaths{})
+	o.Locations = fakeLocationCandidates{locs: []string{`D:\Apps`}}
+	o.RelocationPath = path
+
+	if _, err := Run(o); err != nil {
+		t.Fatalf("Run 失败: %v", err)
+	}
+	l, err := relocation.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(l.Relocations) != 2 {
+		t.Fatalf("账本应保留 2 条，实际 %d: %+v", len(l.Relocations), l.Relocations)
+	}
+}
+
 func TestApplyLedgerWriteFailureDoesNotFailInstall(t *testing.T) {
 	dir := t.TempDir()
 	blocker := filepath.Join(dir, "blocker")

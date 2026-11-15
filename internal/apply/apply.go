@@ -81,6 +81,9 @@ func Run(opts Options) (*Result, error) {
 	if opts.Confirm == nil {
 		opts.Confirm = func(string) bool { return false }
 	}
+	if opts.RelocationPath != "" && opts.Relocations == nil {
+		opts.Relocations = relocation.New()
+	}
 
 	res := &Result{}
 
@@ -193,10 +196,24 @@ func Run(opts Options) (*Result, error) {
 			}
 		}
 
+		// 账本里的 verified 只是上次的结果，不能永久信任：跳过前按当前
+		// InstallLocation 复核。目录被移动或读取失败时继续安装，避免把
+		// 过期状态当成完成。
+		ledgerNote := ""
+		if !it.Reinstall && it.InstallDirApplied && it.InstallDirVerified {
+			var force bool
+			force, ledgerNote = recheckLedgerInstallDir(opts, &it)
+			if force {
+				it.Reinstall = true
+			}
+		}
+
 		// C4.1/P1：先跑 verify 判断是否已完成，已完成就跳过，不重装。
 		// 指定安装目录是显式重装：verify 通过也不能跳过。
 		if it.Reinstall {
-			fmt.Fprintf(opts.Out, "  [重装] %s —— 指定了安装目录，跳过幂等检查\n", it.Name)
+			if ledgerNote == "" {
+				fmt.Fprintf(opts.Out, "  [重装] %s —— 指定了安装目录，跳过幂等检查\n", it.Name)
+			}
 		} else if it.VerifyCmd != "" {
 			vr := opts.Exec.Run(context.Background(), it.VerifyCmd, 60*time.Second)
 			if verifyPassed(vr, it.VerifyExpect) {
@@ -206,8 +223,12 @@ func Run(opts Options) (*Result, error) {
 					Index: i, Kind: it.Kind, Name: it.Name, Tier: it.Tier,
 					Command: it.VerifyCmd, Status: StepSkipped,
 					InstallDirVerified: it.InstallDirVerified,
+					InstallDirActual:   it.InstallDirActual,
 					StartedAt:          started, FinishedAt: opts.Now().Format(time.RFC3339),
 					Output: "幂等检查：已完成",
+				}
+				if ledgerNote != "" {
+					st.Output += "\n目录：" + ledgerNote
 				}
 				if okVer {
 					st.ActualVersion = ver
@@ -321,6 +342,33 @@ func Run(opts Options) (*Result, error) {
 
 	_ = opts.Journal.Finish("")
 	return res, nil
+}
+
+// recheckLedgerInstallDir 在按账本跳过前复核当前 InstallLocation。
+//
+// 返回 force=true 表示账本记录已不可信，必须继续执行安装命令；
+// note 非空时写进跳过步骤，报告里能看出「未复核」而不是已验证。
+func recheckLedgerInstallDir(opts Options, it *plan.Item) (force bool, note string) {
+	if opts.Locations == nil {
+		it.InstallDirVerified = false
+		fmt.Fprintf(opts.Out, "  [目录] %s —— 未验证（账本记录未复核）\n", it.Name)
+		return false, "账本记录未复核"
+	}
+	actual, found, err := readInstallLocation(opts.Locations, it.Name)
+	if err != nil {
+		it.InstallDirVerified = false
+		it.InstallDirActual = ""
+		fmt.Fprintf(opts.Out, "  [目录] %s —— 账本记录未复核（读取失败），重新安装\n", it.Name)
+		return true, "账本记录未复核（读取 InstallLocation 失败：" + err.Error() + "）"
+	}
+	if found && actual != "" && !strings.Contains(actual, " | ") && sameInstallDir(actual, it.InstallDir) {
+		it.InstallDirActual = actual
+		return false, ""
+	}
+	it.InstallDirVerified = false
+	it.InstallDirActual = actual
+	fmt.Fprintf(opts.Out, "  [目录] %s —— 账本记录与实际不符，重新安装\n", it.Name)
+	return true, "账本记录与实际不符"
 }
 
 // verifyInstallDir 只验证目录落点，不把目录不一致升级成安装失败。

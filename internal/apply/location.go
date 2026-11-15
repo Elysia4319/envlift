@@ -3,6 +3,7 @@ package apply
 import (
 	"strings"
 
+	"github.com/Elysia4319/envlift/internal/relocation"
 	"github.com/Elysia4319/envlift/internal/winreg"
 )
 
@@ -72,5 +73,23 @@ func (r *RegistryLocationReader) InstallLocations(name string) ([]string, error)
 			}
 		}
 	}
-	return out, nil
+	return dedupeLocations(out), nil
+}
+
+// dedupeLocations 按归一化目录去重，保留首次出现的原始写法。
+//
+// 同一软件可能同时出现在 HKLM64、HKLM32 与 HKCU；把同一路径当成多个候选
+// 会让 verifyInstallDir 误判为同名多版本，从而永远无法验证。
+func dedupeLocations(in []string) []string {
+	seen := make(map[string]bool, len(in))
+	out := make([]string, 0, len(in))
+	for _, loc := range in {
+		key := relocation.NormalizeDir(loc)
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, loc)
+	}
+	return out
 }
