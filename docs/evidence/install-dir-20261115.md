@@ -10,7 +10,7 @@
 - 旧 VM 场景二进制：`envlift 0.1.0-alpha (schema v1)`
 - 干净重建验收二进制：`envlift 0.1.0-dev (schema v1)`
 - 二进制 SHA256：`3A020C190AC49E840DF1DB239AF7C3FC339D24402B325104AC7C358786B2941F`
-- 代码基线：HEAD `61b9ffd`，包含 `cacd696 fix(cli): 复用内置配方合并逻辑`
+- 验收代码基线：`61b9ffd`（代码提交 `cacd696`；后续 `e36ff3a` 仅文档收尾）
 
 ## 干净构建与 SHA 说明
 
