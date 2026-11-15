@@ -269,6 +269,7 @@ func buildItems(p *plan.Plan, steps []apply.Step) []ItemResult {
 			InstallDir:           it.InstallDir,
 			InstallDirApplied:    it.InstallDirApplied,
 			InstallDirVerified:   it.InstallDirVerified,
+			InstallDirActual:     it.InstallDirActual,
 			Reinstall:            it.Reinstall,
 			VerifyCommandPresent: it.VerifyCmd != "",
 		}

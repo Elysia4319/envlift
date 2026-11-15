@@ -414,3 +414,20 @@ func TestReportShowsInstallDirUnverifiedActual(t *testing.T) {
 		t.Errorf("markdown 应显示未验证与实际目录: %s", md)
 	}
 }
+
+// 账本命中时计划本身已带 actual_dir；没有 apply 步骤也要能进报告。
+func TestReportCarriesPlanInstallDirActual(t *testing.T) {
+	p := samplePlan()
+	p.Items[0].InstallDir = `D:\Apps\Git`
+	p.Items[0].InstallDirApplied = true
+	p.Items[0].InstallDirVerified = true
+	p.Items[0].InstallDirActual = `D:\Apps\Git`
+
+	doc := Build(Input{Plan: p}, time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
+	if doc.Items[0].InstallDirActual != `D:\Apps\Git` {
+		t.Errorf("报告应从计划带出实际目录: %+v", doc.Items[0])
+	}
+	if !strings.Contains(RenderMarkdown(doc), "目录已验证") {
+		t.Error("markdown 应显示目录已验证")
+	}
+}

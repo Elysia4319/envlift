@@ -305,12 +305,17 @@ func TestSetLocationUsesRelocationLedger(t *testing.T) {
 	id := base.Items[0].TargetID
 
 	ledger := relocation.New()
-	ledger.Upsert(relocation.Entry{TargetID: id, InstallDir: `D:\Apps\App`, Verified: true})
+	ledger.Upsert(relocation.Entry{
+		TargetID: id, InstallDir: `D:\Apps\App`, ActualDir: `D:\Apps\App`, Verified: true,
+	})
 	o.Relocations = ledger
 	got := mustBuildDec(t, o, Decisions{{TargetID: id, Kind: DecKindSoftware,
 		Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}}})
 	if got.Items[0].Reinstall || !got.Items[0].InstallDirApplied || !got.Items[0].InstallDirVerified {
 		t.Errorf("账本命中应不重装并保留已验证状态: %+v", got.Items[0])
+	}
+	if got.Items[0].InstallDirActual != `D:\Apps\App` {
+		t.Errorf("账本命中应带出实际目录: %+v", got.Items[0])
 	}
 
 	o.Relocations = relocation.New()

@@ -175,6 +175,8 @@ type Item struct {
 	// 它们不进 target_id（D23）：身份仍由软件本身决定，目录只是本次执行参数。
 	InstallDir        string `json:"install_dir,omitempty"`
 	InstallDirApplied bool   `json:"install_dir_applied,omitempty"`
+	// InstallDirActual 是账本里记录的上次实际目录，只作展示，不参与跳过判断。
+	InstallDirActual string `json:"install_dir_actual,omitempty"`
 	// InstallDirVerified 在 plan 阶段表示账本里的上次验证结果；apply 后会以本次 Step 结果覆盖。
 	InstallDirVerified bool `json:"install_dir_verified,omitempty"`
 	// Reinstall 表示本次即使 verify 通过也要执行安装（指定目录后的重装语义）。

@@ -550,6 +550,7 @@ func (p *Plan) applyItemDecision(i int, d Decision) {
 				it.Reinstall = false
 				it.InstallDirApplied = true
 				it.InstallDirVerified = e.Verified
+				it.InstallDirActual = e.ActualDir
 				it.Reason = "按决策指定安装目录 " + dir + "（账本记录已完成，后续不再重装）"
 				if !e.Verified {
 					it.Reason += "（账本记录未验证，后续不自动重装）"

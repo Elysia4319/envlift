@@ -15,8 +15,10 @@ const DefaultPath = "envlift.relocations.yaml"
 
 // Entry 是一次已完成的安装目录变更。
 type Entry struct {
-	TargetID    string `yaml:"target_id" json:"target_id"`
-	InstallDir  string `yaml:"install_dir" json:"install_dir"`
+	TargetID   string `yaml:"target_id" json:"target_id"`
+	InstallDir string `yaml:"install_dir" json:"install_dir"`
+	// ActualDir 是安装后从注册表读到的实际目录；读不到时留空，不猜。
+	ActualDir   string `yaml:"actual_dir,omitempty" json:"actual_dir,omitempty"`
 	Verified    bool   `yaml:"verified" json:"verified"`
 	CompletedAt string `yaml:"completed_at" json:"completed_at"`
 	LastCommand string `yaml:"last_command,omitempty" json:"last_command,omitempty"`
@@ -48,6 +50,10 @@ func Load(path string) (*Ledger, error) {
 	var l Ledger
 	if err := yaml.Unmarshal(data, &l); err != nil {
 		return nil, fmt.Errorf("解析重装账本 %s 失败: %w", path, err)
+	}
+	if l.Version > 1 {
+		return nil, fmt.Errorf("账本 %s 版本为 %d，账本版本高于本程序支持（最高 %d），请升级 envlift",
+			path, l.Version, 1)
 	}
 	if l.Version == 0 {
 		l.Version = 1

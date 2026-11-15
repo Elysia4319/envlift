@@ -394,7 +394,8 @@ func recordRelocation(opts Options, res *Result, it plan.Item, step Step) {
 	}
 	ledger.Upsert(relocation.Entry{
 		TargetID: it.TargetID, InstallDir: it.InstallDir,
-		Verified: step.InstallDirVerified, CompletedAt: opts.Now().Format(time.RFC3339),
+		ActualDir: step.InstallDirActual,
+		Verified:  step.InstallDirVerified, CompletedAt: opts.Now().Format(time.RFC3339),
 		LastCommand: step.Command,
 	})
 	if err := relocation.Save(opts.RelocationPath, ledger); err != nil {

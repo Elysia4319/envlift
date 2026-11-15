@@ -294,7 +294,7 @@ func TestApplyWritesRelocationLedger(t *testing.T) {
 		t.Fatal(err)
 	}
 	e, ok := l.Find("a1", `d:/apps/git/`)
-	if !ok || !e.Verified || e.LastCommand != "install-git" {
+	if !ok || !e.Verified || e.LastCommand != "install-git" || e.ActualDir != `D:\Apps\Git` {
 		t.Fatalf("账本记录不对: %+v / %v", e, ok)
 	}
 }
