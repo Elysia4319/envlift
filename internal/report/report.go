@@ -90,9 +90,11 @@ type ItemResult struct {
 	// ManualHint 是 manual 项可直接照做的人工步骤（下载/账号/选项）。
 	ManualHint string `json:"manual_hint,omitempty"`
 	// InstallDir / InstallDirApplied 记录 set_location 决策指定的安装目录。
-	InstallDir        string `json:"install_dir,omitempty"`
-	InstallDirApplied bool   `json:"install_dir_applied,omitempty"`
-	Reinstall         bool   `json:"reinstall,omitempty"`
+	InstallDir         string `json:"install_dir,omitempty"`
+	InstallDirApplied  bool   `json:"install_dir_applied,omitempty"`
+	Reinstall          bool   `json:"reinstall,omitempty"`
+	InstallDirVerified bool   `json:"install_dir_verified,omitempty"`
+	InstallDirActual   string `json:"install_dir_actual,omitempty"`
 	// VerifyCommandPresent 只表示配方声明了 verify；风险提示需要它，
 	// 但完整 verify 命令属于计划内部细节，不写进报告。
 	VerifyCommandPresent bool `json:"verify_command_present,omitempty"`
@@ -302,6 +304,8 @@ func buildItems(p *plan.Plan, steps []apply.Step) []ItemResult {
 			}
 			r.ActualVersion = s.ActualVersion
 			r.VersionRaw = s.VersionRaw
+			r.InstallDirVerified = s.InstallDirVerified
+			r.InstallDirActual = s.InstallDirActual
 			// verify 跑过且成功、却解析不出版本 → 明确标 unparsed（不是"没跑"）。
 			if it.VerifyCmd != "" && s.ActualVersion == "" {
 				r.VersionUnparsed = true

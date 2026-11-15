@@ -377,3 +377,40 @@ func TestReportCarriesInstallDirAndMarkdownColumn(t *testing.T) {
 		t.Error("指定目录且存在 verify 时应在风险提示中提醒")
 	}
 }
+
+func TestReportShowsInstallDirVerified(t *testing.T) {
+	p := samplePlan()
+	p.Items[0].InstallDir = `D:\Apps\Git`
+	p.Items[0].InstallDirApplied = true
+	doc := Build(Input{
+		Plan: p,
+		Steps: []apply.Step{{Index: 0, Kind: "software", Status: apply.StepOK,
+			InstallDirVerified: true, InstallDirActual: `D:\Apps\Git`}},
+	}, time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
+
+	if !doc.Items[0].InstallDirVerified {
+		t.Error("报告应保留目录已验证状态")
+	}
+	if !strings.Contains(RenderMarkdown(doc), "目录已验证") {
+		t.Error("markdown 应显示目录已验证")
+	}
+}
+
+func TestReportShowsInstallDirUnverifiedActual(t *testing.T) {
+	p := samplePlan()
+	p.Items[0].InstallDir = `D:\Apps\Git`
+	p.Items[0].InstallDirApplied = true
+	doc := Build(Input{
+		Plan: p,
+		Steps: []apply.Step{{Index: 0, Kind: "software", Status: apply.StepOK,
+			InstallDirVerified: false, InstallDirActual: `D:\Other`}},
+	}, time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
+
+	if doc.Items[0].InstallDirVerified || doc.Items[0].InstallDirActual != `D:\Other` {
+		t.Errorf("报告应保留未验证与实际目录: %+v", doc.Items[0])
+	}
+	md := RenderMarkdown(doc)
+	if !strings.Contains(md, "目录未验证") || !strings.Contains(md, `实际：D:\Other`) {
+		t.Errorf("markdown 应显示未验证与实际目录: %s", md)
+	}
+}

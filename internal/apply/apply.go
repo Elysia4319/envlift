@@ -39,6 +39,8 @@ type Options struct {
 	SkipAdmin bool
 	// Preflight 在 apply 开始时重新探测环境（C5）。
 	Preflight func() (wingetOK, networkOK bool, note string)
+	// Locations 读取安装后的注册表 InstallLocation，用于验证目录落点。
+	Locations LocationReader
 	Timeout   time.Duration
 	Now       func() time.Time
 }
@@ -277,6 +279,9 @@ func Run(opts Options) (*Result, error) {
 				step.VersionRaw = truncate(vr.Output, 300)
 			}
 		}
+		if step.Status == StepOK && it.InstallDirApplied {
+			verifyInstallDir(opts, &step, it)
+		}
 		_ = opts.Journal.Append(step)
 
 		if step.Status == StepFailed {
@@ -307,6 +312,43 @@ func Run(opts Options) (*Result, error) {
 
 	_ = opts.Journal.Finish("")
 	return res, nil
+}
+
+// verifyInstallDir 只验证目录落点，不把目录不一致升级成安装失败。
+func verifyInstallDir(opts Options, step *Step, it plan.Item) {
+	if opts.Locations == nil {
+		step.InstallDirVerified = false
+		step.Output = truncate(step.Output+"\n--- 安装目录验证 ---\n未配置 LocationReader，无法读取 InstallLocation", 2000)
+		fmt.Fprintf(opts.Out, "  [目录] %s —— 未验证（未配置读取器）\n", it.Name)
+		return
+	}
+	actual, found, err := opts.Locations.InstallLocation(it.Name)
+	step.InstallDirActual = actual
+	switch {
+	case err != nil:
+		step.InstallDirVerified = false
+		step.Output = truncate(step.Output+"\n--- 安装目录验证 ---\n读取失败: "+err.Error(), 2000)
+		fmt.Fprintf(opts.Out, "  [目录] %s —— 未验证（读取 InstallLocation 失败）\n", it.Name)
+	case !found || actual == "":
+		step.InstallDirVerified = false
+		step.Output = truncate(step.Output+"\n--- 安装目录验证 ---\n未找到 InstallLocation", 2000)
+		fmt.Fprintf(opts.Out, "  [目录] %s —— 未验证（未找到 InstallLocation）\n", it.Name)
+	case sameInstallDir(actual, it.InstallDir):
+		step.InstallDirVerified = true
+		step.Output = truncate(step.Output+"\n--- 安装目录验证 ---\n已确认: "+actual, 2000)
+		fmt.Fprintf(opts.Out, "  [目录] %s —— 已验证（%s）\n", it.Name, actual)
+	default:
+		step.InstallDirVerified = false
+		step.Output = truncate(step.Output+"\n--- 安装目录验证 ---\n实际: "+actual+"\n请求: "+it.InstallDir, 2000)
+		fmt.Fprintf(opts.Out, "  [目录] %s —— 未验证（实际 %s）\n", it.Name, actual)
+	}
+}
+
+func sameInstallDir(a, b string) bool {
+	norm := func(s string) string {
+		return strings.ToLower(strings.TrimRight(strings.TrimSpace(s), `\/`))
+	}
+	return norm(a) == norm(b)
 }
 
 // collectPathValues 收集需要写入的 PATH 条目，按 section 分组。

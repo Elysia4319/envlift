@@ -21,6 +21,16 @@ type fakeExec struct {
 	results map[string]ExecResult
 }
 
+type fakeLocations struct {
+	loc   string
+	found bool
+	err   error
+}
+
+func (f fakeLocations) InstallLocation(string) (string, bool, error) {
+	return f.loc, f.found, f.err
+}
+
 func (f *fakeExec) Run(_ context.Context, command string, _ time.Duration) ExecResult {
 	f.calls = append(f.calls, command)
 	if r, ok := f.results[command]; ok {
@@ -146,6 +156,63 @@ func TestApplyReinstallsWhenInstallDirApplied(t *testing.T) {
 	}
 	if len(loaded.Steps) != 1 || !loaded.Steps[0].Reinstall {
 		t.Errorf("journal 应记录 reinstall: %+v", loaded.Steps)
+	}
+}
+
+func TestApplyVerifiesInstallDir(t *testing.T) {
+	cases := []struct {
+		name     string
+		reader   LocationReader
+		verified bool
+		actual   string
+		output   string
+	}{
+		{
+			name:     "match",
+			reader:   fakeLocations{loc: `D:\Apps\Git\`, found: true},
+			verified: true, actual: `D:\Apps\Git\`, output: "已确认",
+		},
+		{
+			name:     "mismatch",
+			reader:   fakeLocations{loc: `D:\Other`, found: true},
+			verified: false, actual: `D:\Other`, output: "实际",
+		},
+		{
+			name:     "unknown",
+			reader:   fakeLocations{err: errors.New("拒绝访问")},
+			verified: false, output: "读取失败",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := testPlan(plan.Item{
+				Kind: "software", Name: "Git", Status: plan.StatusPlanned, Tier: plan.TierLocal,
+				Command: "install-git", InstallDir: `D:\Apps\Git`,
+				InstallDirApplied: true, Reinstall: true,
+			})
+			o := baseOpts(t, p, &fakeExec{}, &fakePaths{})
+			o.Locations = c.reader
+			var out bytes.Buffer
+			o.Out = &out
+
+			if _, err := Run(o); err != nil {
+				t.Fatalf("Run 失败: %v", err)
+			}
+			loaded, err := LoadJournal(o.Journal.Path())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(loaded.Steps) != 1 {
+				t.Fatalf("steps = %d", len(loaded.Steps))
+			}
+			st := loaded.Steps[0]
+			if st.InstallDirVerified != c.verified || st.InstallDirActual != c.actual {
+				t.Errorf("目录验证记录不对: %+v", st)
+			}
+			if !strings.Contains(st.Output, c.output) {
+				t.Errorf("Step 输出应包含 %q: %q", c.output, st.Output)
+			}
+		})
 	}
 }
 

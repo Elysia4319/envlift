@@ -404,12 +404,13 @@ func doApply(c Config, p *plan.Plan, conf api.Confirmations, rep task.Reporter) 
 	}
 
 	res, err := apply.Run(apply.Options{
-		Plan:     p,
-		Journal:  j,
-		Exec:     apply.NewExecutor(),
-		Paths:    pathmgmt.New(),
-		Out:      logWriter{rep},
-		Elevated: p.Target.Elevated,
+		Plan:      p,
+		Journal:   j,
+		Exec:      apply.NewExecutor(),
+		Paths:     pathmgmt.New(),
+		Locations: apply.NewRegistryLocationReader(),
+		Out:       logWriter{rep},
+		Elevated:  p.Target.Elevated,
 		// D15：skip_admin 由执行器统一阻止提权项，不靠这里的回调兜底。
 		SkipAdmin: conf.SkipAdmin(),
 		// C-2：需提权项必须在 admin_confirmed 里逐项出现，缺失即视为未确认。

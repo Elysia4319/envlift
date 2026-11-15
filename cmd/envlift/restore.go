@@ -518,13 +518,14 @@ func doApply(p *plan.Plan, env *scan.Environment, cfgPath, journalDir string, ye
 	fmt.Printf("事务日志: %s\n\n", j.Path())
 
 	res, err := apply.Run(apply.Options{
-		Plan:     p,
-		Journal:  j,
-		Exec:     apply.NewExecutor(),
-		Paths:    pathmgmt.New(),
-		Out:      os.Stdout,
-		Elevated: env.Info.Elevated,
-		Confirm:  pr.confirm,
+		Plan:      p,
+		Journal:   j,
+		Exec:      apply.NewExecutor(),
+		Paths:     pathmgmt.New(),
+		Locations: apply.NewRegistryLocationReader(),
+		Out:       os.Stdout,
+		Elevated:  env.Info.Elevated,
+		Confirm:   pr.confirm,
 		Preflight: func() (bool, bool, string) {
 			ok, note := probeNetwork(3 * time.Second)
 			return env.Info.WingetAvailable, ok, note

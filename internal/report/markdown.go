@@ -86,6 +86,16 @@ func RenderMarkdown(d *Document) string {
 		if it.Reinstall {
 			note = "重装；" + note
 		}
+		if it.InstallDirApplied {
+			if it.InstallDirVerified {
+				note = "目录已验证；" + note
+			} else {
+				note = "目录未验证；" + note
+				if it.InstallDirActual != "" {
+					note += "（实际：" + it.InstallDirActual + "）"
+				}
+			}
+		}
 		after := orDash(it.ActualVersion)
 		if it.VersionUnparsed {
 			after = "解析失败"
@@ -148,6 +158,14 @@ func RenderMarkdown(d *Document) string {
 		}
 		if it.InstallDirApplied && it.VerifyCommandPresent {
 			fmt.Fprintf(&b, "- %s 指定了安装目录，verify 命令可能仍指向旧路径，请在 VM 上确认\n", it.Name)
+			risks++
+		}
+		if it.InstallDirApplied && !it.InstallDirVerified {
+			msg := fmt.Sprintf("- %s 的安装目录未验证", it.Name)
+			if it.InstallDirActual != "" {
+				msg += fmt.Sprintf("（实际：%s）", it.InstallDirActual)
+			}
+			fmt.Fprintf(&b, "%s\n", msg)
 			risks++
 		}
 	}
