@@ -100,6 +100,10 @@ go install github.com/Elysia4319/envlift/cmd/envlift@latest
 - 当前版本不支持 `select{installer}` 与 `set_location` 组合。
 - 安装目录变更不提供自动卸载回滚；回滚只覆盖 PATH。
 - 安装后目录未验证时报告标 `unverified`，不会显示成“已验证成功”。
+- `set_location` 是一次性重装：成功后写入本地 `envlift.relocations.yaml`，后续 apply 不再重复重装；改目录或删除账本条目才会再次重装。
+- 重装账本是本地状态，已被 `.gitignore` 忽略，不入库。
+- runtime 条目暂不做注册表目录验证；同名多版本也可能只能标 `unverified`。
+- winget 缺 `--force` 时当前实现会阻止整个计划，而不只是跳过单个条目。
 - 这是 early alpha，接口、配置格式和 GUI 仍可能变化。
 
 ## 文档入口

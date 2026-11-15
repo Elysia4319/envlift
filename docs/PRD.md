@@ -524,6 +524,11 @@ envlift\
 - winget 失败后若本地配方没有 `install_dir_arg`，不保留可执行降级方案，避免装到默认目录。
 - 安装目录变更不提供自动卸载回滚；回滚只覆盖 PATH。
 - 安装后读取注册表 `InstallLocation` 校验落点；读不到或不一致时报告标 `unverified`，不把安装判失败。
+- `set_location` 成功后写入本地 `envlift.relocations.yaml`；同一 target_id + 归一化目录再次出现时 `Reinstall=false`，由 verify 决定是否跳过。
+- 账本是本地状态，不入库；账本读取失败按空账本继续并 warning，写入失败不把安装判失败。
+- 改目录或删除账本条目才会再次重装；账本 `verified=false` 不会自动重试。
+- runtime 条目暂不支持注册表目录验证；同名多版本可能标 `unverified` 并列出候选。
+- winget 缺 `--force` 时当前实现是整批 blocked，不只是跳过单个条目。
 
 ### 10.4 规范化（M3）
 
