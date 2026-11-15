@@ -424,6 +424,52 @@ func TestSetLocationWingetWithoutForceBlocksPlan(t *testing.T) {
 	}
 }
 
+// 第一版保持全局 blocked：一个 winget 项缺 --force 会阻止整批，
+// 其它条目本身不改状态。改成 item-level 需要单独评审，不在本版扩散。
+func TestWingetForceBlockStaysGlobal(t *testing.T) {
+	cfg := baseConfig()
+	cfg.Software = []config.Software{
+		software("App", "1.0", "Vendor.App"),
+		software("Other", "2.0", "Vendor.Other"),
+	}
+	r := recipe("app", "Setup-*.exe", "/S")
+	r.Aliases = []string{"app"}
+	r.WingetIDs = []string{"Vendor.App"}
+	r.WingetLocationArg = `--location "{install_dir}"`
+	target := okTarget()
+	target.WingetForceOK = false
+	o := testOptions(cfg, target, nil, []config.Installer{r})
+	base := mustBuild(t, o)
+	appID := ""
+	for _, it := range base.Items {
+		if it.Name == "App" {
+			appID = it.TargetID
+		}
+	}
+	if appID == "" {
+		t.Fatal("找不到 App 条目")
+	}
+
+	got, err := Build(Options{
+		Config: o.Config, Target: o.Target, InstallerDir: o.InstallerDir,
+		InstallerFiles: o.InstallerFiles, Recipes: o.Recipes, Now: o.Now,
+		Exists: o.Exists, Expand: o.Expand, ExpandVars: o.ExpandVars,
+		Decisions: Decisions{{TargetID: appID, Kind: DecKindSoftware,
+			Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}}},
+	})
+	if err != nil {
+		t.Fatalf("Build 不应返回错误: %v", err)
+	}
+	if !got.IsBlocked() || !strings.Contains(got.Blocked, "winget 不支持强制重装") {
+		t.Fatalf("缺 --force 应阻止整个计划: %q", got.Blocked)
+	}
+	for _, it := range got.Items {
+		if it.Name == "Other" && it.Status != StatusPlanned {
+			t.Errorf("其它条目本身不应被改写: %+v", it)
+		}
+	}
+}
+
 // 配方未声明对应参数时拒绝，不能静默忽略。
 func TestSetLocationRejectsUnsupportedRecipe(t *testing.T) {
 	cfg := baseConfig()
