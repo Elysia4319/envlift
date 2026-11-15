@@ -333,6 +333,13 @@ func TestSetLocationUsesRelocationLedger(t *testing.T) {
 	if got.Items[0].Reinstall || got.Items[0].InstallDirVerified {
 		t.Errorf("账本未验证应不重装但标 unverified: %+v", got.Items[0])
 	}
+
+	o.Relocations = relocation.New()
+	got = mustBuildDec(t, o, Decisions{{TargetID: id, Kind: DecKindSoftware,
+		Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}}})
+	if !got.Items[0].Reinstall {
+		t.Error("空账本应重新重装")
+	}
 }
 
 // set_location：winget 包按配方模板追加 --location，并同步重算本地降级命令。

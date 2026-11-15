@@ -36,3 +36,14 @@ func TestBuiltinInstallDirCoverage(t *testing.T) {
 		}
 	}
 }
+
+func TestBuiltinNsisInstallDirArgUsesRestOfLine(t *testing.T) {
+	for _, r := range Builtin() {
+		if r.Name != "7zip" && r.Name != "notepadplusplus" {
+			continue
+		}
+		if r.InstallDirArg != `/D={install_dir}` {
+			t.Errorf("%s 的 NSIS /D 参数应使用剩余整行模板，实际 %q", r.Name, r.InstallDirArg)
+		}
+	}
+}

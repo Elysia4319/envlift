@@ -71,8 +71,15 @@ func SplitCommand(s string) ([]string, error) {
 	inQuote := false
 	hasToken := false
 
-	for _, r := range s {
+	for i, r := range s {
 		switch {
+		case !inQuote && !hasToken && strings.EqualFold(s[i:min(i+3, len(s))], "/D="):
+			// NSIS /D 必须是最后一个参数，路径可以含空格且通常不加引号。
+			// 把 /D= 之后的整段作为单个 argv，避免被空格拆开。
+			rest := strings.TrimSpace(s[i+3:])
+			rest = strings.Trim(rest, `"`)
+			out = append(out, "/D="+rest)
+			return out, nil
 		case r == '"':
 			inQuote = !inQuote
 			hasToken = true

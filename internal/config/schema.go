@@ -235,8 +235,8 @@ func validateInstallDirTemplate(tpl string) string {
 	if tpl == "" {
 		return ""
 	}
-	if strings.Count(tpl, "{install_dir}") > 1 {
-		return "中的 {install_dir} 只能出现一次"
+	if n := strings.Count(tpl, "{install_dir}"); n != 1 {
+		return fmt.Sprintf("必须恰好包含一个 {install_dir}（实际 %d 个）", n)
 	}
 	for _, r := range tpl {
 		if r == '\n' || r == '\r' || r < 0x20 || r == 0x7f {

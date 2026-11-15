@@ -372,6 +372,126 @@ func TestApplySecondRunSkipsWhenLedgerMatch(t *testing.T) {
 	}
 }
 
+// 账本命中即跳过，不依赖 VerifyCmd；verified=false 或无读取器时标 unverified。
+func TestApplyLedgerHitSkipsWithoutVerify(t *testing.T) {
+	cases := []struct {
+		name         string
+		verified     bool
+		reader       LocationReader
+		wantVerified bool
+		wantOutput   string
+	}{
+		{
+			name: "verified-and-rechecked", verified: true,
+			reader:       fakeLocations{loc: `C:\Apps\7zip`, found: true},
+			wantVerified: true,
+		},
+		{
+			name: "ledger-unverified", verified: false,
+			reader:       fakeLocations{loc: `C:\Apps\7zip`, found: true},
+			wantVerified: false, wantOutput: "账本记录未验证",
+		},
+		{
+			name: "no-reader", verified: true, reader: nil,
+			wantVerified: false, wantOutput: "账本记录未复核",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := testPlan(plan.Item{
+				TargetID: "a1", Kind: "software", Name: "7-Zip", Status: plan.StatusPlanned,
+				Tier: plan.TierLocal, Command: "install-7zip", InstallDir: `C:\Apps\7zip`,
+				InstallDirApplied: true, InstallDirVerified: c.verified,
+			})
+			ex := &fakeExec{}
+			var out bytes.Buffer
+			o := baseOpts(t, p, ex, &fakePaths{})
+			o.Out = &out
+			o.Locations = c.reader
+			o.Relocations = relocation.New()
+			o.RelocationPath = filepath.Join(t.TempDir(), relocation.DefaultPath)
+
+			res, err := Run(o)
+			if err != nil {
+				t.Fatalf("Run 失败: %v", err)
+			}
+			if res.Skipped != 1 || res.Executed != 0 {
+				t.Fatalf("账本命中应跳过: %+v", res)
+			}
+			for _, call := range ex.calls {
+				if call == "install-7zip" {
+					t.Fatal("账本命中不应执行安装")
+				}
+			}
+			loaded, err := LoadJournal(o.Journal.Path())
+			if err != nil {
+				t.Fatal(err)
+			}
+			st := loaded.Steps[0]
+			if st.Status != StepSkipped || st.InstallDirVerified != c.wantVerified {
+				t.Errorf("步骤状态不对: %+v", st)
+			}
+			if c.wantOutput != "" && !strings.Contains(st.Output, c.wantOutput) {
+				t.Errorf("步骤输出应含 %q: %q", c.wantOutput, st.Output)
+			}
+		})
+	}
+}
+
+// verified=true 但目录不符/读取失败时，即使没有 VerifyCmd 也必须重装。
+func TestApplyVerifiedLedgerMismatchReinstallsWithoutVerify(t *testing.T) {
+	cases := []struct {
+		name    string
+		reader  LocationReader
+		wantLog string
+	}{
+		{
+			name: "moved-dir", reader: fakeLocations{loc: `C:\Other\7zip`, found: true},
+			wantLog: "账本记录与实际不符，重新安装",
+		},
+		{
+			name: "read-failed", reader: fakeLocations{err: errors.New("拒绝访问")},
+			wantLog: "账本记录未复核（读取失败），重新安装",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := testPlan(plan.Item{
+				TargetID: "a1", Kind: "software", Name: "7-Zip", Status: plan.StatusPlanned,
+				Tier: plan.TierLocal, Command: "install-7zip", InstallDir: `C:\Apps\7zip`,
+				InstallDirApplied: true, InstallDirVerified: true,
+			})
+			ex := &fakeExec{results: map[string]ExecResult{"install-7zip": {ExitCode: 0}}}
+			var out bytes.Buffer
+			o := baseOpts(t, p, ex, &fakePaths{})
+			o.Out = &out
+			o.Locations = c.reader
+			o.Relocations = relocation.New()
+			o.RelocationPath = filepath.Join(t.TempDir(), relocation.DefaultPath)
+
+			res, err := Run(o)
+			if err != nil {
+				t.Fatalf("Run 失败: %v", err)
+			}
+			if res.Executed != 1 || res.Skipped != 0 {
+				t.Fatalf("目录不符/读取失败应重装: %+v", res)
+			}
+			if !strings.Contains(out.String(), c.wantLog) {
+				t.Errorf("缺少日志 %q: %s", c.wantLog, out.String())
+			}
+			found := false
+			for _, call := range ex.calls {
+				if call == "install-7zip" {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("应执行安装命令，实际: %v", ex.calls)
+			}
+		})
+	}
+}
+
 // 账本 verified 不能永久信任：跳过前必须按当前 InstallLocation 复核。
 func TestApplyRechecksVerifiedLedgerBeforeSkipping(t *testing.T) {
 	cases := []struct {
@@ -985,6 +1105,10 @@ func TestSplitCommand(t *testing.T) {
 		want []string
 	}{
 		{`"C:\Program Files\x\setup.exe" /S`, []string{`C:\Program Files\x\setup.exe`, "/S"}},
+		{`"C:\setup.exe" /S /D=C:\Program Files\7-Zip`, []string{`C:\setup.exe`, "/S", `/D=C:\Program Files\7-Zip`}},
+		{`"C:\setup.exe" /S /D=D:\My Apps\7-Zip`, []string{`C:\setup.exe`, "/S", `/D=D:\My Apps\7-Zip`}},
+		{`"C:\setup.exe" /S /D="C:\Program Files\7-Zip"`, []string{`C:\setup.exe`, "/S", `/D=C:\Program Files\7-Zip`}},
+		{`"C:\setup.exe" /S /D="D:\My Apps\7-Zip"`, []string{`C:\setup.exe`, "/S", `/D=D:\My Apps\7-Zip`}},
 		{`winget install --id Git.Git --exact`, []string{"winget", "install", "--id", "Git.Git", "--exact"}},
 		{`git --version`, []string{"git", "--version"}},
 	}

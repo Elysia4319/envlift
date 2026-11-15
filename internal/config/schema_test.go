@@ -36,9 +36,18 @@ func TestValidateInstallDirTemplates(t *testing.T) {
 				`--location "{install_dir}"`),
 		},
 		{
+			name: "exactly one placeholder is valid",
+			ins:  installerWithDirArgs("one", `/D={install_dir}`, ""),
+		},
+		{
+			name:    "missing placeholder is rejected",
+			ins:     installerWithDirArgs("missing", `/D=C:\Apps\7zip`, ""),
+			wantErr: "恰好包含一个",
+		},
+		{
 			name:    "placeholder twice is rejected",
 			ins:     installerWithDirArgs("twice", `/DIR="{install_dir}" /BACKUP="{install_dir}"`, ""),
-			wantErr: "install_dir_arg",
+			wantErr: "恰好包含一个",
 		},
 		{
 			name:    "newline is rejected",
