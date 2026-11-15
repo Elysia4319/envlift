@@ -109,7 +109,7 @@
 - [x] winget 包指定新目录，确认该包的 `--location` 是否被接受。
 - [x] winget 失败后本地降级：如果本地配方没有 `install_dir_arg`，确认不会静默装到默认目录。
 - [x] 已安装软件设置新目录，确认进入重装而不是 `skipped`。
-- [ ] 重装失败时报告能看出失败原因，不显示 `succeeded`。
+- [x] 重装失败时报告能看出失败原因，不显示 `succeeded`。
 - [x] 确认报告在目录未验证时显示 `unverified`/实际目录，不显示成“已验证成功”。
 - [x] 连续两次 apply：第一次重装并写账本，第二次同目录不再重装。
 - [x] 账本 `verified=true` 但实际目录被移动：手工移动安装目录或改写注册表 `InstallLocation` 后重跑，
@@ -139,9 +139,12 @@
 | 10. 账本异常 | 通过 | 损坏/version>1 warning；不可写 warning 但安装继续 | 见证据 |
 | 11. 无 LocationReader | 未验证 | CLI 固定注入 RegistryLocationReader | 单测覆盖 |
 | 12. 回滚限制 | 部分通过 | 安装目录-only journal 无 PATH 快照；7-Zip 仍安装 | PATH 回滚沿用 2026-11-03 F7 |
+| 13. 重装失败报告 | 通过 | `fail-setup.exe` 退出 1；报告 `status=failed`、failure_reason 可读；无账本 | 未出现 succeeded |
 
 > 本轮已勾选通过项；场景 11 与场景 12 的部分内容仍未验证。完整证据见
 > `docs/evidence/install-dir-20261115.md` 与 `docs/evidence/install-dir-20261115/`。
+> 第 124 行保持未勾选：安装目录变更不提供自动卸载回滚；PATH 回滚本轮未重跑，
+> 沿用 2026-11-03 F7 结果。
 
 ## 12. VM 执行顺序（F0–F8，按序勾选，每场景单独记录）
 

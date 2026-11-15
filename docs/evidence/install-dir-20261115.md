@@ -7,9 +7,26 @@
 - Guest：Windows 11 Home，build `26300`，版本 `10.0.26300`
 - winget：`v1.11.510`；`winget install --help` 含 `--force`
 - 权限：普通会话 `ADMIN=False`；最高权限交互式计划任务 `ADMIN=True`、Session 1
-- 测试二进制：`envlift 0.1.0-alpha (schema v1)`
-- 二进制 SHA256：`3A5DDD63EA5949FC3A7689BF0C1B843F800A18D4F0FD69ABFCA2F5FC311A9E60`
-- 代码基线：HEAD `a416826`，包含本轮未提交的 CLI `recipes.Merge` 修复
+- 旧 VM 场景二进制：`envlift 0.1.0-alpha (schema v1)`
+- 干净重建验收二进制：`envlift 0.1.0-dev (schema v1)`
+- 二进制 SHA256：`3A020C190AC49E840DF1DB239AF7C3FC339D24402B325104AC7C358786B2941F`
+- 代码基线：HEAD `61b9ffd`，包含 `cacd696 fix(cli): 复用内置配方合并逻辑`
+
+## 干净构建与 SHA 说明
+
+本轮从干净提交重新构建：
+
+```text
+go build -trimpath -buildvcs=false -ldflags "-s -w" -o tmp\envlift-accept.exe ./cmd/envlift
+```
+
+- 新二进制 SHA256：`3A020C190AC49E840DF1DB239AF7C3FC339D24402B325104AC7C358786B2941F`
+- 旧二进制 SHA256：`3A5DDD63EA5949FC3A7689BF0C1B843F800A18D4F0FD69ABFCA2F5FC311A9E60`
+- 旧二进制来自 `a416826` + 未提交修复，`go version -m` 显示 `vcs.modified=true`；
+  新二进制来自 `61b9ffd`，`-buildvcs=false`，模块版本为 `(devel)`。
+- 同一干净 commit 用默认 VCS 构建得到 SHA `8B98E12DE284A2EC72FAF6075710A86CBF3C47222BE3C88AF1BAE24BFA07FBD5`，
+  说明 VCS 元信息本身也会改变 SHA。旧/新 SHA 差异同时来自提交差异与 VCS 信息，不能只归因于 VCS。
+- 旧二进制已包含同一 CLI 修复；本轮场景 13 使用新二进制重跑，其余 VM 结果保留并注明“重新构建自干净 commit”。
 
 ## 环境限制
 
@@ -46,6 +63,7 @@
 | 10. 账本异常 | 通过 | 损坏 YAML/version>1 均 warning 并按空账本继续；账本不可写 warning 但安装继续 | 见 `apply-ledger-dir` 输出 |
 | 11. 无 LocationReader | 未验证 | CLI 固定注入 `RegistryLocationReader`，无法在不改代码/API 的情况下关闭 | 单测已覆盖 `Locations=nil` |
 | 12. 回滚限制 | 部分通过 | 安装目录-only journal 无 PATH 快照，rollback 报错；7-Zip 仍安装 | PATH 回滚沿用 2026-11-03 F7 结果，本轮未重跑 |
+| 13. 重装失败报告 | 通过 | `fail-setup.exe` 退出 1；报告 `status=failed`、`failure_reason=simulated installer failure: exit 1`；无账本 | 未出现 `succeeded` |
 
 ## 关键输出
 
@@ -233,6 +251,30 @@ SEVENZIP=YES
 
 安装目录变更没有被卸载回滚；7-Zip 仍安装。PATH 回滚在 2026-11-03 F7 已验证，本轮未重跑。
 
+### 场景 13：重装失败报告
+
+本地失败安装器输出：
+
+```text
+[重装] Fail Install —— 指定了安装目录，跳过幂等检查
+[执行] Fail Install —— "C:\envlift\cases\fail-install\installers\fail-setup.exe" /S /D=C:\Apps\fail
+执行完成: 成功 0 · 跳过 0 · 失败 1 · 阻止 0 · PATH 新增 0
+停止原因: 条目 Fail Install 执行失败（退出码 1），已停止并保留现状
+```
+
+报告 `restore-20261103-102644.json`：
+
+```text
+name           = Fail Install
+status         = failed
+tier           = local
+failure_reason = simulated installer failure: exit 1
+install_dir    = C:\Apps\fail
+reinstall      = true
+```
+
+账本文件不存在（失败不写入成功记录）。
+
 ## 证据文件
 
 报告与 journal 见 `docs/evidence/install-dir-20261115/`：
@@ -247,11 +289,17 @@ SEVENZIP=YES
 - `restore-20261103-103143.*`：场景 8
 - `restore-20261103-103002.*`：场景 9
 - `restore-20261103-103259.*`：场景 10
+- `restore-20261103-102644.*`：场景 13
 - `7zip-102646.json` / `7zip-102812.json` / `7zip-103001.json` / `7zip-103257.json` / `readfail-103135.json`：关键 journal
+- `fail-102643.json`：场景 13 journal
 
 ## 未完成
 
-- 场景 11（无 LocationReader）无法从 CLI 关闭读取器，未做真实 VM 验证。
-- 场景 12 的 PATH 回滚未在本轮重跑，沿用 2026-11-03 F7 结果。
+- 场景 11（无 LocationReader）：CLI 固定注入 `RegistryLocationReader`，无法在不改代码/API 的情况下关闭；
+  未做真实 VM 验证，仅单测覆盖 `Locations=nil`。checklist 第 11 项保持未勾选。
+- 场景 12（回滚限制）：已确认安装目录变更不提供自动卸载回滚；PATH 回滚本轮未重跑，
+  沿用 2026-11-03 F7 结果。checklist 第 124 行保持未勾选。
 - Git for Windows 2.56.0 的 `/DIR` 仍未生效；本轮改用 7-Zip NSIS 完成本地目录验收。
 - winget 版本漂移导致的 `unverified` 是保守结果，不是安装目录失败；后续可考虑按配方 `match_display` 或 winget 包名辅助匹配。
+- 可选诊断改进（E）未做：`InstallLocations` 仍会把读取错误折叠为零候选；
+  场景 8 的安全行为正确，但日志显示“不符”而不是“读取失败”。
