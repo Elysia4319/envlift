@@ -151,12 +151,14 @@ type Installer struct {
 	// InstallDirArg / WingetLocationArg 是「用户指定安装目录」的显式模板。
 	// 模板中用 {install_dir} 表示用户选择的目录；空表示该配方不支持指定目录。
 	// 前者追加到本地安装包命令，后者追加到 winget 命令；两者可同时声明。
-	InstallDirArg     string  `yaml:"install_dir_arg,omitempty" json:"install_dir_arg,omitempty"`
-	WingetLocationArg string  `yaml:"winget_location_arg,omitempty" json:"winget_location_arg,omitempty"`
-	Verify            *Verify `yaml:"verify,omitempty" json:"verify,omitempty"`
-	ExpectReboot      bool    `yaml:"expect_reboot" json:"expect_reboot"`
-	Source            string  `yaml:"source" json:"source"`
-	VerifiedAt        *string `yaml:"verified_at,omitempty" json:"verified_at,omitempty"`
+	InstallDirArg     string `yaml:"install_dir_arg,omitempty" json:"install_dir_arg,omitempty"`
+	WingetLocationArg string `yaml:"winget_location_arg,omitempty" json:"winget_location_arg,omitempty"`
+	// InstallDirSource 记录上述模板的依据：官方文档链接或本机 --help 实测。
+	InstallDirSource string  `yaml:"install_dir_source,omitempty" json:"install_dir_source,omitempty"`
+	Verify           *Verify `yaml:"verify,omitempty" json:"verify,omitempty"`
+	ExpectReboot     bool    `yaml:"expect_reboot" json:"expect_reboot"`
+	Source           string  `yaml:"source" json:"source"`
+	VerifiedAt       *string `yaml:"verified_at,omitempty" json:"verified_at,omitempty"`
 }
 
 // Verify 描述「如何判断该软件已经装好」，用于 restore 幂等判断（D13-P1/P3）。
