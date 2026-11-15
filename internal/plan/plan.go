@@ -16,6 +16,7 @@ import (
 
 	"github.com/Elysia4319/envlift/internal/config"
 	"github.com/Elysia4319/envlift/internal/match"
+	"github.com/Elysia4319/envlift/internal/relocation"
 	"github.com/Elysia4319/envlift/internal/targetid"
 	"github.com/Elysia4319/envlift/internal/vcompare"
 )
@@ -105,6 +106,8 @@ type Options struct {
 	// Decisions 是本机侧的选择（dry-run 与 apply 必须用同一份）。
 	// 缺省为空 = 全部按默认处理，未决策项标 blocked-needs-decision。
 	Decisions Decisions
+	// Relocations 是本机重装账本；命中时 set_location 不再重复重装。
+	Relocations *relocation.Ledger
 }
 
 // DetectRaw 判定配置是否为 --raw 导出。
@@ -172,6 +175,8 @@ type Item struct {
 	// 它们不进 target_id（D23）：身份仍由软件本身决定，目录只是本次执行参数。
 	InstallDir        string `json:"install_dir,omitempty"`
 	InstallDirApplied bool   `json:"install_dir_applied,omitempty"`
+	// InstallDirVerified 在 plan 阶段表示账本里的上次验证结果；apply 后会以本次 Step 结果覆盖。
+	InstallDirVerified bool `json:"install_dir_verified,omitempty"`
 	// Reinstall 表示本次即使 verify 通过也要执行安装（指定目录后的重装语义）。
 	Reinstall bool `json:"reinstall,omitempty"`
 	// InstallDirSupported 表示该条目命中的配方是否声明了安装目录模板。
@@ -249,6 +254,8 @@ type Plan struct {
 	locationResolvers map[string]func(Item, string) Item
 	// recipeInput 是构建时的配方表，校验 set_location 时用来查模板。
 	recipeInput []config.Installer
+	// relocations 是本机重装账本；只在构建期用于一次性重装判断。
+	relocations *relocation.Ledger
 }
 
 // IsBlocked 报告计划是否因硬错误不可执行。
@@ -304,6 +311,7 @@ func Build(opts Options) (*Plan, error) {
 		recipeResolvers:   map[string]func(Item, string) Item{},
 		locationResolvers: map[string]func(Item, string) Item{},
 		recipeInput:       opts.Recipes,
+		relocations:       opts.Relocations,
 	}
 
 	byRecipe := matchInstallerFiles(opts.Recipes, opts.InstallerFiles)

@@ -8,6 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/Elysia4319/envlift/internal/config"
+	"github.com/Elysia4319/envlift/internal/relocation"
 	"github.com/Elysia4319/envlift/internal/targetid"
 )
 
@@ -288,6 +289,44 @@ func TestSetLocationLocalRewritesCommand(t *testing.T) {
 	}
 	if got.Items[0].TargetID != it.TargetID {
 		t.Error("target_id 不应因安装目录变化")
+	}
+}
+
+func TestSetLocationUsesRelocationLedger(t *testing.T) {
+	cfg := baseConfig()
+	cfg.Software = []config.Software{software("App", "1.0", "")}
+	r := recipe("app", "Setup-*.exe", "/S")
+	r.Aliases = []string{"app"}
+	r.InstallDirArg = `/DIR="{install_dir}"`
+	target := okTarget()
+	target.WingetOK = false
+	o := testOptions(cfg, target, []string{"Setup-1.exe"}, []config.Installer{r})
+	base := mustBuild(t, o)
+	id := base.Items[0].TargetID
+
+	ledger := relocation.New()
+	ledger.Upsert(relocation.Entry{TargetID: id, InstallDir: `D:\Apps\App`, Verified: true})
+	o.Relocations = ledger
+	got := mustBuildDec(t, o, Decisions{{TargetID: id, Kind: DecKindSoftware,
+		Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}}})
+	if got.Items[0].Reinstall || !got.Items[0].InstallDirApplied || !got.Items[0].InstallDirVerified {
+		t.Errorf("账本命中应不重装并保留已验证状态: %+v", got.Items[0])
+	}
+
+	o.Relocations = relocation.New()
+	o.Relocations.Upsert(relocation.Entry{TargetID: id, InstallDir: `D:\Other`, Verified: true})
+	got = mustBuildDec(t, o, Decisions{{TargetID: id, Kind: DecKindSoftware,
+		Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}}})
+	if !got.Items[0].Reinstall {
+		t.Error("目录变化应重新重装")
+	}
+
+	o.Relocations = relocation.New()
+	o.Relocations.Upsert(relocation.Entry{TargetID: id, InstallDir: `D:\Apps\App`, Verified: false})
+	got = mustBuildDec(t, o, Decisions{{TargetID: id, Kind: DecKindSoftware,
+		Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}}})
+	if got.Items[0].Reinstall || got.Items[0].InstallDirVerified {
+		t.Errorf("账本未验证应不重装但标 unverified: %+v", got.Items[0])
 	}
 }
 
