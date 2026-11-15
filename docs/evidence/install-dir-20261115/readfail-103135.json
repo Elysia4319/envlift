@@ -1,0 +1,25 @@
+{
+  "app": "envlift",
+  "kind": "apply-journal",
+  "schema": 1,
+  "started_at": "2026-11-03T10:31:35+08:00",
+  "config_path": "envlift.yaml",
+  "steps": [
+    {
+      "index": 0,
+      "kind": "software",
+      "name": "Noop Readfail",
+      "tier": "local",
+      "command": "\"C:\\envlift\\cases\\noop-readfail\\installers\\noop-readfail-setup.exe\" /noop /DIR=C:\\Apps\\readfail",
+      "needs_admin": false,
+      "expect_reboot": false,
+      "reinstall": true,
+      "exit_code": 0,
+      "output": "--- 安装目录验证 ---\n未找到 InstallLocation",
+      "status": "ok",
+      "started_at": "2026-11-03T10:31:35+08:00",
+      "finished_at": "2026-11-03T10:31:43+08:00"
+    }
+  ],
+  "finished": true
+}

@@ -1,0 +1,58 @@
+{
+  "report_schema": 1,
+  "kind": "restore-report",
+  "generated_at": "2026-11-03T10:31:43+08:00",
+  "config_path": "envlift.yaml",
+  "journal": "reports\\.envlift-journal-20261103-103135.json",
+  "env": {
+    "os": "Windows 11",
+    "build": "26300",
+    "arch": "amd64",
+    "username": "${USER}",
+    "hostname": "${HOST}",
+    "winget_ok": true,
+    "network_ok": true,
+    "elevated": false
+  },
+  "plan_hash": "0b0eda108482e5bb6313a85c78ad7cfa461598449e37a1735bc189a143933b1f",
+  "mode": "apply",
+  "summary": {
+    "total": 1,
+    "succeeded": 1,
+    "skipped": 0,
+    "manual": 0,
+    "blocked_needs_decision": 0,
+    "failed": 0,
+    "path_writes": 0,
+    "awaiting_reboot": false
+  },
+  "items": [
+    {
+      "target_id": "74c12216e37d",
+      "kind": "software",
+      "name": "Noop Readfail",
+      "expected_version": "1.0",
+      "version_unparsed": true,
+      "tier": "local",
+      "status": "succeeded",
+      "command": "\"C:\\envlift\\cases\\noop-readfail\\installers\\noop-readfail-setup.exe\" /noop /DIR=C:\\Apps\\readfail",
+      "exit_code": 0,
+      "verify_result": "pass",
+      "needs_admin": false,
+      "expect_reboot": false,
+      "decision": "set_location",
+      "reason": "按决策指定安装目录 C:\\Apps\\readfail（账本记录已完成，后续不再重装）",
+      "install_dir": "C:\\Apps\\readfail",
+      "install_dir_applied": true,
+      "verify_command_present": true
+    }
+  ],
+  "path_changes": [],
+  "warnings": null,
+  "decisions": {
+    "apply_mode": "all",
+    "actions": {
+      "set_location": 1
+    }
+  }
+}

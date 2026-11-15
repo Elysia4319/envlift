@@ -1,0 +1,57 @@
+{
+  "report_schema": 1,
+  "kind": "restore-report",
+  "generated_at": "2026-11-03T10:28:06+08:00",
+  "config_path": "envlift.yaml",
+  "journal": "reports\\.envlift-journal-20261103-102707.json",
+  "env": {
+    "os": "Windows 11",
+    "build": "26300",
+    "arch": "amd64",
+    "username": "${USER}",
+    "hostname": "${HOST}",
+    "winget_ok": true,
+    "network_ok": true,
+    "elevated": true
+  },
+  "plan_hash": "0e1a3b5638512ff3f5d553199f8a1439259737b170633f9cc7a2e9b72096597c",
+  "mode": "apply",
+  "summary": {
+    "total": 1,
+    "succeeded": 1,
+    "skipped": 0,
+    "manual": 0,
+    "blocked_needs_decision": 0,
+    "failed": 0,
+    "path_writes": 0,
+    "awaiting_reboot": false
+  },
+  "items": [
+    {
+      "target_id": "d9b22a3aae5c",
+      "kind": "software",
+      "name": "7-Zip 25.01 (x64)",
+      "expected_version": "25.01",
+      "tier": "winget",
+      "status": "succeeded",
+      "command": "winget install --id 7zip.7zip --exact --silent --accept-package-agreements --accept-source-agreements --location \"C:\\Apps\\7zip-winget\" --force",
+      "exit_code": 0,
+      "verify_result": "not_run",
+      "needs_admin": true,
+      "expect_reboot": false,
+      "decision": "set_location",
+      "reason": "按决策指定安装目录 C:\\Apps\\7zip-winget",
+      "install_dir": "C:\\Apps\\7zip-winget",
+      "install_dir_applied": true,
+      "reinstall": true
+    }
+  ],
+  "path_changes": [],
+  "warnings": null,
+  "decisions": {
+    "apply_mode": "all",
+    "actions": {
+      "set_location": 1
+    }
+  }
+}

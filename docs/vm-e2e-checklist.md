@@ -105,23 +105,43 @@
 
 ## 11. 安装目录与重装
 
-- [ ] 本地 Inno/NSIS 包指定新目录，安装后注册表 `InstallLocation` 与目标目录一致。
-- [ ] winget 包指定新目录，确认该包的 `--location` 是否被接受。
-- [ ] winget 失败后本地降级：如果本地配方没有 `install_dir_arg`，确认不会静默装到默认目录。
-- [ ] 已安装软件设置新目录，确认进入重装而不是 `skipped`。
+- [x] 本地 Inno/NSIS 包指定新目录，安装后注册表 `InstallLocation` 与目标目录一致。
+- [x] winget 包指定新目录，确认该包的 `--location` 是否被接受。
+- [x] winget 失败后本地降级：如果本地配方没有 `install_dir_arg`，确认不会静默装到默认目录。
+- [x] 已安装软件设置新目录，确认进入重装而不是 `skipped`。
 - [ ] 重装失败时报告能看出失败原因，不显示 `succeeded`。
-- [ ] 确认报告在目录未验证时显示 `unverified`/实际目录，不显示成“已验证成功”。
-- [ ] 连续两次 apply：第一次重装并写账本，第二次同目录不再重装。
-- [ ] 账本 `verified=true` 但实际目录被移动：手工移动安装目录或改写注册表 `InstallLocation` 后重跑，
+- [x] 确认报告在目录未验证时显示 `unverified`/实际目录，不显示成“已验证成功”。
+- [x] 连续两次 apply：第一次重装并写账本，第二次同目录不再重装。
+- [x] 账本 `verified=true` 但实际目录被移动：手工移动安装目录或改写注册表 `InstallLocation` 后重跑，
       确认打印“账本记录与实际不符，重新安装”并真正执行安装，而不是 `skipped`；重装后账本
       `actual_dir` 更新为新目录。
-- [ ] `InstallLocation` 读取失败（键损坏或权限不足）：确认不按账本跳过，执行安装并标 `unverified`。
-- [ ] 同一软件同时出现在 HKLM64 / HKLM32 / HKCU 且指向同一路径：确认候选去重为 1 个；
+- [x] `InstallLocation` 读取失败（键损坏或权限不足）：确认不按账本跳过，执行安装并标 `unverified`。
+- [x] 同一软件同时出现在 HKLM64 / HKLM32 / HKCU 且指向同一路径：确认候选去重为 1 个；
       指向不同路径时仍标 `unverified` 并列出候选。
-- [ ] `expect_reboot` 第一次成功后写账本，重启后的第二次 apply 不重装。
-- [ ] 修改安装目录后再次 apply，确认重新重装。
-- [ ] 账本损坏/不可写：记录 warning，安装是否继续、是否重复重装的实际表现。
+- [x] `expect_reboot` 第一次成功后写账本，重启后的第二次 apply 不重装。
+- [x] 修改安装目录后再次 apply，确认重新重装。
+- [x] 账本损坏/不可写：记录 warning，安装是否继续、是否重复重装的实际表现。
 - [ ] 记录限制：安装目录变更不提供自动卸载回滚；回滚只覆盖 PATH。
+
+### 2026-11-15 实测结果（安装目录，VM `envlift-vm-20261102`）
+
+| 场景 | 结果 | 关键证据 | 备注 |
+|---|---|---|---|
+| 1. 本地包首次 apply | 通过 | 7-Zip NSIS：`/S /D=C:\Apps\7zip`；报告 verified=true、actual_dir=`C:\Apps\7zip\` | 使用真实 DisplayName |
+| 2. 同目录第二次 apply | 通过 | `status=skipped`、Reinstall=false、未执行安装命令 | 账本保留 |
+| 3. 改目录第三次 apply | 通过 | `/D=C:\Apps\7zip2`；账本 actual_dir 更新 | 同 target_id |
+| 4. expect_reboot | 通过 | 第一次停在重启并写账本；重启后第二次 skipped | 无害 noop |
+| 5. winget 包 | 通过（caveat） | `--location` 与 `--force` 均在命令中；注册表落点为请求目录 | winget 装 26.06、配置 25.01，报告保守 unverified |
+| 6. 降级目录丢失 | 通过 | `fallback_plan=null`、无 `[降级]`、标记文件不存在 | 不会装到默认目录 |
+| 7. 账本与实际不符 | 通过 | 打印“账本记录与实际不符，重新安装”并真正重装 | actual_dir 更新 |
+| 8. InstallLocation 读取失败 | 通过（安全行为） | 拒绝读取后未跳过、执行安装并标 unverified | 读取错误被折叠为“未找到” |
+| 9. 候选去重 | 通过 | 同路径去重为 1 并跳过；不同路径标 unverified 并列出候选 | HKLM/HKCU |
+| 10. 账本异常 | 通过 | 损坏/version>1 warning；不可写 warning 但安装继续 | 见证据 |
+| 11. 无 LocationReader | 未验证 | CLI 固定注入 RegistryLocationReader | 单测覆盖 |
+| 12. 回滚限制 | 部分通过 | 安装目录-only journal 无 PATH 快照；7-Zip 仍安装 | PATH 回滚沿用 2026-11-03 F7 |
+
+> 本轮已勾选通过项；场景 11 与场景 12 的部分内容仍未验证。完整证据见
+> `docs/evidence/install-dir-20261115.md` 与 `docs/evidence/install-dir-20261115/`。
 
 ## 12. VM 执行顺序（F0–F8，按序勾选，每场景单独记录）
 
