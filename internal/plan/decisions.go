@@ -170,6 +170,7 @@ func ValidateDecisions(p *Plan, ds Decisions) *DecisionErrors {
 	}
 	errs := &DecisionErrors{}
 	seen := make(map[string]int, len(ds))
+	seenDecision := make(map[string]Decision, len(ds))
 	for i, d := range ds {
 		idx := i + 1
 		report := func(code, format string, a ...any) {
@@ -182,10 +183,18 @@ func ValidateDecisions(p *Plan, ds Decisions) *DecisionErrors {
 			continue
 		}
 		if prev, ok := seen[d.TargetID]; ok {
-			report(CodeInvalidDecisions, "与第 %d 条决策指向同一个 target_id；同一个条目只能有一条决策", prev)
+			prevD := seenDecision[d.TargetID]
+			if isInstallerSelect(prevD) && d.Action == ActionSetLocation ||
+				isInstallerSelect(d) && prevD.Action == ActionSetLocation {
+				report(CodeInvalidDecisions,
+					"请先选安装包，再单独指定目录；当前版本不支持 select{installer} 与 set_location 组合")
+			} else {
+				report(CodeInvalidDecisions, "与第 %d 条决策指向同一个 target_id；同一个条目只能有一条决策", prev)
+			}
 			continue
 		}
 		seen[d.TargetID] = idx
+		seenDecision[d.TargetID] = d
 
 		it, pathIdx := p.findTarget(d.TargetID)
 		if it == nil && pathIdx < 0 {
@@ -272,6 +281,10 @@ func (p *Plan) validateSetLocation(d Decision, it *Item, report func(code, forma
 	if it.Status != StatusPlanned || (it.Tier != TierLocal && it.Tier != TierWinget) {
 		report(CodeInvalidDecisions, "只有 planned 且层级为 local 或 winget 的条目才能指定安装目录（当前 status=%s tier=%s）",
 			it.Status, it.Tier)
+		return
+	}
+	if p.locationResolvers[it.TargetID] == nil {
+		report(CodeInvalidDecisions, "该条目缺少命令重算信息，不能指定安装目录")
 		return
 	}
 	r := findRecipe(p.recipeInput, it.RecipeName)
@@ -517,13 +530,19 @@ func (p *Plan) applyItemDecision(i int, d Decision) {
 		}
 	case ActionSetLocation:
 		dir := strings.TrimSpace(*d.Params.InstallDir)
+		if it.Tier == TierWinget && !p.Target.WingetForceOK {
+			it.Status = StatusBlockedNeedsDecision
+			it.Command = ""
+			it.Reinstall = true
+			it.Reason = "winget 不支持强制重装（--force），不能指定安装目录"
+			p.Blocked = "条目 " + it.Name + "：" + it.Reason
+			return
+		}
 		if r := p.locationResolvers[d.TargetID]; r != nil {
 			p.Items[i] = r(*it, dir)
 			it = &p.Items[i]
-		} else {
-			it.InstallDir = dir
-			it.InstallDirApplied = true
 		}
+		it.Reinstall = true
 		it.Decision = d.Action
 		it.Reason = "按决策指定安装目录 " + dir
 	}
@@ -701,6 +720,11 @@ func allowedActions(kind string) []string {
 		return []string{ActionAdd, ActionAccept, ActionRewrite, ActionSkip, ActionMarkInvalid}
 	}
 	return nil
+}
+
+// isInstallerSelect 只识别 select{installer}；version/recipe 与目录组合不在本版限制内。
+func isInstallerSelect(d Decision) bool {
+	return d.Action == ActionSelect && d.Params != nil && d.Params.Installer != nil
 }
 
 // noteNameMismatch 把「决策里写的项名与配置不一致」记进 warnings（B5）。

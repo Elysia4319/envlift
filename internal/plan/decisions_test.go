@@ -301,7 +301,7 @@ func TestSetLocationWingetRewritesCommandAndFallback(t *testing.T) {
 	if it.Tier != TierWinget || it.FallbackPlan == nil {
 		t.Fatalf("setup 无效: tier=%q fallback=%v", it.Tier, it.FallbackPlan)
 	}
-	wantWinget := it.Command + ` --location "D:\Apps\App"`
+	wantWinget := it.Command + ` --location "D:\Apps\App" --force`
 	wantLocal := it.FallbackPlan.Command + ` /DIR="D:\Apps\App"`
 
 	got := mustBuildDec(t, o, Decisions{{TargetID: it.TargetID, Kind: it.Kind,
@@ -315,6 +315,36 @@ func TestSetLocationWingetRewritesCommandAndFallback(t *testing.T) {
 	}
 	if gi.FallbackPlan.InstallDir != `D:\Apps\App` {
 		t.Errorf("降级方案应记录安装目录: %+v", gi.FallbackPlan)
+	}
+}
+
+func TestSetLocationWingetWithoutForceBlocksPlan(t *testing.T) {
+	cfg := baseConfig()
+	cfg.Software = []config.Software{software("App", "1.0", "Vendor.App")}
+	r := recipe("app", "Setup-*.exe", "/S")
+	r.Aliases = []string{"app"}
+	r.WingetIDs = []string{"Vendor.App"}
+	r.WingetLocationArg = `--location "{install_dir}"`
+	target := okTarget()
+	target.WingetForceOK = false
+	o := testOptions(cfg, target, nil, []config.Installer{r})
+	p := mustBuild(t, o)
+
+	got, err := Build(Options{
+		Config: o.Config, Target: o.Target, InstallerDir: o.InstallerDir,
+		InstallerFiles: o.InstallerFiles, Recipes: o.Recipes, Now: o.Now,
+		Exists: o.Exists, Expand: o.Expand, ExpandVars: o.ExpandVars,
+		Decisions: Decisions{{TargetID: p.Items[0].TargetID, Kind: DecKindSoftware,
+			Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}}},
+	})
+	if err != nil {
+		t.Fatalf("Build 不应返回错误，应标计划 blocked: %v", err)
+	}
+	if !got.IsBlocked() || !strings.Contains(got.Blocked, "winget 不支持强制重装") {
+		t.Errorf("计划应 blocked 且原因可读: blocked=%q", got.Blocked)
+	}
+	if got.Items[0].Status != StatusBlockedNeedsDecision {
+		t.Errorf("条目应标 blocked，实际 %q", got.Items[0].Status)
 	}
 }
 
@@ -338,10 +368,55 @@ func TestSetLocationRejectsUnsupportedRecipe(t *testing.T) {
 	r.WingetLocationArg = ""
 	r.InstallDirArg = `/DIR="{install_dir}"`
 	p = mustBuild(t, testOptions(cfg, okTarget(), []string{"Setup-1.exe"}, []config.Installer{r}))
+	if p.Items[0].InstallDirSupported {
+		t.Error("winget 条目只声明本地参数时不应标记 supported")
+	}
 	issues = decisionsIssues(t, p, Decisions{{TargetID: p.Items[0].TargetID, Kind: DecKindSoftware,
 		Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}}})
 	if len(issues) != 1 || !strings.Contains(issues[0].Reason, "未声明 winget 安装目录参数") {
 		t.Fatalf("winget 缺参数应拒绝: %+v", issues)
+	}
+}
+
+// resolver 缺失时必须在校验阶段拒绝，不能留下“字段已应用但命令没重算”的静默路径。
+func TestSetLocationRejectsMissingResolver(t *testing.T) {
+	cfg := baseConfig()
+	cfg.Software = []config.Software{software("App", "1.0", "")}
+	r := recipe("app", "Setup-*.exe", "/S")
+	r.Aliases = []string{"app"}
+	r.InstallDirArg = `/DIR="{install_dir}"`
+	target := okTarget()
+	target.WingetOK = false
+	p := mustBuild(t, testOptions(cfg, target, []string{"Setup-1.exe"}, []config.Installer{r}))
+	delete(p.locationResolvers, p.Items[0].TargetID)
+
+	issues := decisionsIssues(t, p, Decisions{{TargetID: p.Items[0].TargetID, Kind: DecKindSoftware,
+		Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}}})
+	if len(issues) != 1 || !strings.Contains(issues[0].Reason, "缺少命令重算信息") {
+		t.Fatalf("resolver 缺失应拒绝: %+v", issues)
+	}
+}
+
+// 第一版明确拒绝 select{installer} 与 set_location 的组合，并给出可读原因。
+func TestSetLocationRejectsInstallerSelectCombination(t *testing.T) {
+	cfg := baseConfig()
+	cfg.Software = []config.Software{software("App", "1.0", "")}
+	r := recipe("app", "Setup-*.exe", "/S")
+	r.Aliases = []string{"app"}
+	r.InstallDirArg = `/DIR="{install_dir}"`
+	target := okTarget()
+	target.WingetOK = false
+	p := mustBuild(t, testOptions(cfg, target, []string{"Setup-1.exe", "Setup-2.exe"}, []config.Installer{r}))
+	id := p.Items[0].TargetID
+
+	issues := decisionsIssues(t, p, Decisions{
+		{TargetID: id, Kind: DecKindSoftware, Action: ActionSelect,
+			Params: &DecisionParams{Installer: ptr("Setup-1.exe")}},
+		{TargetID: id, Kind: DecKindSoftware, Action: ActionSetLocation,
+			Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}},
+	})
+	if len(issues) != 1 || !strings.Contains(issues[0].Reason, "不支持 select{installer} 与 set_location 组合") {
+		t.Fatalf("组合决策应明确拒绝: %+v", issues)
 	}
 }
 

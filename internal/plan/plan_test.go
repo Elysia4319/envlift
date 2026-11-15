@@ -52,16 +52,17 @@ func recipe(name, match, silent string, deps ...string) config.Installer {
 
 func okTarget() Target {
 	return Target{
-		OS:        "Windows 11",
-		Build:     "26100",
-		Arch:      "amd64",
-		Username:  "newuser",
-		Hostname:  "NEW-PC",
-		WingetOK:  true,
-		WingetVer: "1.29.380",
-		NetworkOK: true,
-		Runtimes:  map[string]RuntimeState{},
-		Drives:    []string{"C:", "D:"},
+		OS:            "Windows 11",
+		Build:         "26100",
+		Arch:          "amd64",
+		Username:      "newuser",
+		Hostname:      "NEW-PC",
+		WingetOK:      true,
+		WingetVer:     "1.29.380",
+		WingetForceOK: true,
+		NetworkOK:     true,
+		Runtimes:      map[string]RuntimeState{},
+		Drives:        []string{"C:", "D:"},
 	}
 }
 
