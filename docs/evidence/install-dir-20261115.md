@@ -8,19 +8,19 @@
 - winget：`v1.11.510`；`winget install --help` 含 `--force`
 - 权限：普通会话 `ADMIN=False`；最高权限交互式计划任务 `ADMIN=True`、Session 1
 - 最终验收二进制：`envlift 0.1.0-alpha (schema v1)`
-- 验收代码提交：`2848e01`（P1 修复）；文档提交随后
-- 二进制 SHA256：`6CFCA653D4CD931BA2E05917B47CE3D6C1703295D4D1AA87390C244151049765`
+- 验收代码提交：`2999cd3`（P2 修复）
+- 二进制 SHA256：`E87EBBB75D2E3E53B3FDCCEA8806D47EABB85C3BBA1AA251F9C149FCD17AB3CC`
 
 ## 最终验收二进制
 
-从 P1 修复提交 `2848e01` 重新构建：
+从 P2 修复提交 `2999cd3` 重新构建：
 
 ```text
 go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=0.1.0-alpha" -o tmp\envlift-accept.exe ./cmd/envlift
 ```
 
 - 版本：`envlift 0.1.0-alpha (schema v1)`
-- SHA256：`6CFCA653D4CD931BA2E05917B47CE3D6C1703295D4D1AA87390C244151049765`
+- SHA256：`E87EBBB75D2E3E53B3FDCCEA8806D47EABB85C3BBA1AA251F9C149FCD17AB3CC`
 - `go version -m` 显示 `-buildvcs=false`，模块版本 `(devel)`，无 `vcs.modified`。
 
 历史二进制（**非最终验收二进制**）：
@@ -28,6 +28,8 @@ go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=0.1.0-alpha" 
 - `a416826` + dirty：SHA `3A5DDD63...`，`vcs.modified=true`。
 - `61b9ffd` + `-buildvcs=false`、无版本注入：SHA `3A020C19...`，版本 `0.1.0-dev`。
 - `ec4e7e9` 的旧 alpha：SHA `455C7A...`，已被 P1 修复替代。
+- `2848e01` 的 P1 alpha：SHA `6CFCA6...`；7zip/winget 的 apply 结果来自该二进制，
+  P2 代码未改这两条路径。P2 最终二进制 `E87EBB...` 用于 Git/NPP 拒绝与 GUI/读取错误验证。
 - 旧结果仅作历史参考，不能作为最终 alpha 验收结论。
 
 ## 环境限制
@@ -56,8 +58,8 @@ go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=0.1.0-alpha" 
 | 1. 本地包首次 apply | 通过（alpha 6CFCA6） | builtin 7zip，无 verify，含空格目录：`/S /D=C:\My Apps\7zip`；报告 `install_dir_verified=true`、`actual_dir=C:\My Apps\7zip\` | `verify_command_present=false` |
 | 2. 同目录第二次 apply | 通过（alpha 6CFCA6） | `status=skipped`、`Reinstall=false`、未执行安装命令；账本命中即跳过 | 不依赖 verify |
 | 3. 改目录第三次 apply | 通过（alpha 6CFCA6） | `/D=C:\My Apps\7zip2`；报告 verified=true；账本 `actual_dir=C:\My Apps\7zip2\` | 同 target_id 账本更新 |
-| 4. expect_reboot | 通过（alpha 6CFCA6） | 第一次停在“完成后需要重启”，exit 2 并写账本；重启后第二次账本命中跳过并标 unverified | 账本 verified=false 也跳过 |
-| 5. winget 包 | 通过（alpha 6CFCA6，版本漂移 unverified） | 第一次 apply 完成、注册表落点为请求目录；第二次账本命中跳过 | 两次报告均 unverified；winget 装 26.06、配置 25.01 |
+| 4. expect_reboot | 部分通过（operator-reported） | 第一次停在“完成后需要重启”，exit 2 并写账本；重启后第二次账本命中跳过并标 unverified | 缺 `LastBootUpTime` 工件，未独立确认 |
+| 5. winget 包 | 部分通过（alpha 6CFCA6，版本漂移 unverified） | 第一次 apply 完成；第二次账本命中跳过 | 6CFCA6 注册表落点未补证；两次报告均 unverified |
 | 6. 降级目录丢失 | 历史通过（alpha 455C，未用 6CFCA6 复跑） | `fallback_plan=null`；无 `[降级]`；标记文件 `MARKER=NO` | 不阻塞本轮 1–5 |
 | 7. 账本与实际不符 | 历史通过（旧二进制，非最终） | 篡改注册表后打印“账本记录与实际不符，重新安装”并执行安装；账本 `actual_dir` 更新 | 未用 alpha 复跑 |
 | 8. InstallLocation 读取失败 | 历史通过（旧二进制，非最终） | 拒绝读取假卸载键后未按账本跳过，执行安装并标 `unverified` | 读取错误被折叠为“未找到” |
@@ -67,7 +69,7 @@ go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=0.1.0-alpha" 
 | 12. 回滚限制 | 部分通过（旧二进制，非最终） | 安装目录-only journal 无 PATH 快照，rollback 报错；7-Zip 仍安装 | PATH 回滚沿用 2026-11-03 F7 结果，本轮未重跑 |
 | 13. 重装失败报告 | 历史通过（alpha 455C，未用 6CFCA6 复跑） | `fail-setup.exe` 退出 1；报告 `status=failed`、`failure_reason=simulated installer failure: exit 1`；无账本 | 未出现 `succeeded` |
 
-最终 alpha 6CFCA6 验收通过项为场景 1–5；场景 6/13 为 alpha 455C 历史结果；
+最终 alpha 6CFCA6 明确通过项为场景 1–3；场景 4/5 部分通过；场景 6/13 为 alpha 455C 历史结果；
 场景 7–10 为旧二进制历史结果；场景 11 未验证；场景 12 部分通过。
 
 ## P1 修复复验（alpha 6CFCA6）
@@ -120,6 +122,40 @@ builtin `notepadplusplus` 没有 `Verify`，安装包 `npp.8.8.1.Installer.exe`�
 
 `validateInstallDirTemplate` 现在要求非空模板恰好包含一个 `{install_dir}`；
 单测覆盖 0 个、1 个、2 个占位符。
+
+## P2 修复补充
+
+### P2-1 Git/NPP 能力位
+
+- Git 与 Notepad++ 的内置配方已移除 `InstallDirArg`、`WingetLocationArg` 与 `InstallDirSource`。
+- `plan` 不再把 Git/NPP 标为 `install_dir_supported`；`validateSetLocation` 拒绝，
+  GUI 目录输入禁用。单测覆盖 Git/NPP 拒绝。
+- P2 alpha `E87EBB...` dry-run 实际拒绝：
+
+```text
+决策无法应用（一条都不执行）：
+  - 第 1 条决策（cde4a4491042）：配方 git 未声明安装目录参数，不能指定目录
+  - 第 2 条决策（72834025d751）：配方 notepadplusplus 未声明安装目录参数，不能指定目录
+```
+
+### P2-2 证据缺口
+
+- 未补 `p1-winget-check.txt`：alpha 6CFCA6 的 winget `InstallLocation` 未由独立工件确认；
+  checklist/PR 正文已降级为“注册表落点未补证”。
+- 未补 `LastBootUpTime`：场景 4/F6 的重启只有 operator-reported，未由仓库工件独立确认；
+  checklist 第 121 行和 F6 保持未勾选/部分通过。
+- 场景 6/13 未用 6CFCA6 复跑，继续标 alpha 455C 历史。
+
+### P2-3 读取错误
+
+- `InstallLocations` 保留首个 `SubKeys`/`ReadValues` 错误；零候选且有错误时返回错误。
+- 有候选时即使其它键读取失败仍返回候选；单测覆盖错误 vs 未找到。
+
+### P2-4 GUI
+
+- `dirOk` 增加 `winget_force_ok`：winget 不支持 `--force` 时禁用目录输入并提示。
+- `putDecision` 在 `set_location` 覆盖 `select` 时提示“将替换版本决策”，取消则不写入。
+- `internal/webui/static_test.go` 断言 `winget_force_ok` 与替换提示存在。
 
 ## 关键输出
 
@@ -372,6 +408,7 @@ reinstall      = true
 - `p1-noop-first.json` / `p1-noop-second.json`：场景 4（alpha 6CFCA6）
 - `p1-winget-apply1.txt` / `p1-winget-apply2.txt` / `p1-winget-ledger.yaml`：场景 5（alpha 6CFCA6）
 - `p1-npp-first.json` / `p1-npp-second.json` / `p1-npp-check.txt`：NPP builtin 无 verify 复跑
+- `p2-deny-git-npp.txt`：Git/Notepad++ 本地目录决策被拒绝的 dry-run 输出
 - `alpha-7zip-first.json` / `alpha-7zip-second.json` / `alpha-7zip-dir2.json` / `alpha-noop-first.json` / `alpha-noop-second.json`：alpha 455C 历史结果
 - `alpha-winget-dryrun.txt` / `alpha-winget-apply.json` / `alpha-winget-apply.md` / `alpha-winget-check.txt` / `alpha-winget-ledger.yaml` / `alpha-winget-source-update.txt`：场景 5 alpha 455C 历史结果
 - `alpha-winget-apply-failure.txt` / `alpha-winget-net.txt`：场景 5 早期网络失败记录（历史）

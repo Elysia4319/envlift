@@ -519,7 +519,8 @@ envlift\
 - 安装目录只是决策参数，不进入 `target_id`（D23）；不设置时计划与命令保持原样。
 - 指定目录视为重装：即使 verify 已通过也继续执行安装；winget 重装命令追加 `--force`。
 - 若本机 winget 的 `install --help` 不含 `--force`，计划标 blocked，不猜测替代参数。
-- 当前版本不支持 `select{installer}` 与 `set_location` 组合；请先选安装包，再单独指定目录。
+- 当前版本不支持 `select{installer}` / `select{recipe}` 与 `set_location` 组合；请先选安装包/配方，再单独指定目录。
+- Git 与 Notepad++ 的本地目录参数尚未验证，内置配方不声明 `install_dir_arg` / `winget_location_arg`；`set_location` 会被拒绝，GUI 目录输入禁用。
 - winget `--location` 是包级 best-effort，是否生效取决于包本身，必须 VM 验证。
 - winget 失败后若本地配方没有 `install_dir_arg`，不保留可执行降级方案，避免装到默认目录。
 - 安装目录变更不提供自动卸载回滚；回滚只覆盖 PATH。
