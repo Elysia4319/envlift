@@ -154,10 +154,10 @@ func runRestore(args []string) int {
 					fmt.Fprintf(os.Stderr, "  - 第 %d 条决策：%s\n", is.Index, is.Reason)
 				}
 			}
-			return exitRefused
+			return planErrorExitCode(err)
 		}
 		fmt.Fprintf(os.Stderr, "生成计划失败: %v\n", err)
-		return exitError
+		return planErrorExitCode(err)
 	}
 	if ledgerErr != nil {
 		p.Warnings = append(p.Warnings, "重装账本读取失败，按空账本继续: "+ledgerErr.Error())
@@ -280,6 +280,15 @@ func writePlanJSON(path string, p *plan.Plan) error {
 		return err
 	}
 	return os.WriteFile(path, append(data, '\n'), 0o644)
+}
+
+// planErrorExitCode 把计划构建错误映射成稳定的 CLI 退出码。
+func planErrorExitCode(err error) int {
+	var derr *plan.DecisionErrors
+	if errors.As(err, &derr) {
+		return exitRefused
+	}
+	return exitError
 }
 
 func renderPlan(w io.Writer, p *plan.Plan, cfgPath, installerDir string) {
