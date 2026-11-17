@@ -13,18 +13,21 @@ import (
 
 // Step 是 journal 里的一步。
 type Step struct {
-	Index        int    `json:"index"`
-	Kind         string `json:"kind"`
-	Name         string `json:"name"`
-	Tier         string `json:"tier,omitempty"`
-	Command      string `json:"command,omitempty"`
-	NeedsAdmin   bool   `json:"needs_admin"`
-	ExpectReboot bool   `json:"expect_reboot"`
-	ExitCode     int    `json:"exit_code"`
-	Output       string `json:"output,omitempty"`
-	Status       string `json:"status"` // ok / failed / skipped / blocked
-	StartedAt    string `json:"started_at"`
-	FinishedAt   string `json:"finished_at"`
+	Index              int    `json:"index"`
+	Kind               string `json:"kind"`
+	Name               string `json:"name"`
+	Tier               string `json:"tier,omitempty"`
+	Command            string `json:"command,omitempty"`
+	NeedsAdmin         bool   `json:"needs_admin"`
+	ExpectReboot       bool   `json:"expect_reboot"`
+	Reinstall          bool   `json:"reinstall,omitempty"`
+	InstallDirVerified bool   `json:"install_dir_verified,omitempty"`
+	InstallDirActual   string `json:"install_dir_actual,omitempty"`
+	ExitCode           int    `json:"exit_code"`
+	Output             string `json:"output,omitempty"`
+	Status             string `json:"status"` // ok / failed / skipped / blocked
+	StartedAt          string `json:"started_at"`
+	FinishedAt         string `json:"finished_at"`
 	// ActualVersion 是 verify 输出里解析出的版本（执行后）；解析不出来就留空，
 	// 原始输出记在 VersionRaw 里，报告据此标 version_unparsed（C2）。
 	ActualVersion string `json:"actual_version,omitempty"`

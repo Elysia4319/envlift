@@ -4,7 +4,7 @@
 > 或误以为已经验过。
 > 本机（开发机）**永远不跑装软件的真实 apply**——本机装软件属于不可回滚的副作用。
 >
-> 配套文档：怎么改 / 怎么验 → `docs/workflow.md`；已锁定决策（D1–D22）→ `docs/decisions.md`。
+> 配套文档：怎么改 / 怎么验 → `docs/workflow.md`；已锁定决策（D1–D23）→ `docs/decisions.md`。
 
 ## 0. 环境准备
 
@@ -103,7 +103,56 @@
 
 ---
 
-## 11. VM 执行顺序（F0–F8，按序勾选，每场景单独记录）
+## 11. 安装目录与重装
+
+- [x] 本地 Inno/NSIS 包指定新目录，安装后注册表 `InstallLocation` 与目标目录一致。
+- [ ] winget 包指定新目录，确认该包的 `--location` 是否被接受。（6CFCA6 历史 apply 完成；E87E 复跑被 winget 源超时打断，最终二进制未完成）
+- [ ] winget 失败后本地降级：如果本地配方没有 `install_dir_arg`，确认不会静默装到默认目录。（alpha 455C 历史通过，未用 6CFCA6 复跑）
+- [x] 已安装软件设置新目录，确认进入重装而不是 `skipped`。
+- [x] 重装失败时报告能看出失败原因，不显示 `succeeded`。
+- [x] 确认报告在目录未验证时显示 `unverified`/实际目录，不显示成“已验证成功”。
+- [x] 连续两次 apply：第一次重装并写账本，第二次同目录命中账本即跳过，不依赖 verify。
+- [ ] 账本 `verified=true` 但实际目录被移动：手工移动安装目录或改写注册表 `InstallLocation` 后重跑，
+      确认打印“账本记录与实际不符，重新安装”并真正执行安装，而不是 `skipped`；重装后账本
+      `actual_dir` 更新为新目录。（旧二进制历史通过，未用 alpha 复跑）
+- [ ] `InstallLocation` 读取失败（键损坏或权限不足）：确认不按账本跳过，执行安装并标 `unverified`。（旧二进制历史通过，未用 alpha 复跑）
+- [ ] 同一软件同时出现在 HKLM64 / HKLM32 / HKCU 且指向同一路径：确认候选去重为 1 个；
+      指向不同路径时仍标 `unverified` 并列出候选。（旧二进制历史通过，未用 alpha 复跑）
+- [ ] `expect_reboot` 第一次成功后写账本，重启后的第二次 apply 命中账本即跳过，不依赖 verify。（operator-reported，未由仓库工件独立确认 `LastBootUpTime`）
+- [x] 修改安装目录后再次 apply，确认重新重装。
+- [ ] 账本损坏/不可写：记录 warning，安装是否继续、是否重复重装的实际表现。（旧二进制历史通过，未用 alpha 复跑）
+- [ ] 记录限制：安装目录变更不提供自动卸载回滚；回滚只覆盖 PATH。（未勾选：本轮未重跑 PATH 回滚）
+
+### 2026-11-15 实测结果（安装目录，VM `envlift-vm-20261102`）
+
+| 场景 | 结果 | 关键证据 | 备注 |
+|---|---|---|---|
+| 1. 本地包首次 apply | 通过（alpha E87E） | builtin 7zip，无 verify，含空格目录：`/S /D=C:\My Apps\7zip`；报告 verified=true | `verify_command_present=false` |
+| 2. 同目录第二次 apply | 通过（alpha E87E） | 账本命中跳过，未执行安装命令 | 不依赖 verify |
+| 3. 改目录第三次 apply | 历史通过（alpha 6CFCA6） | `/D=C:\My Apps\7zip2`；账本 actual_dir 更新 | 未用 E87E 复跑 |
+| 4. expect_reboot | 部分通过（operator-reported） | 第一次停在重启并写账本；重启后第二次账本命中跳过并标 unverified | 缺 `LastBootUpTime` 工件，未独立确认 |
+| 5. winget 包 | 未完成（E87E 源超时；6CFCA6 历史） | 6CFCA6 第一次 apply 完成；E87E 复跑失败 | 最终二进制未完成，注册点未补证 |
+| 6. 降级目录丢失 | 历史通过（alpha 455C，未用 6CFCA6 复跑） | `fallback_plan=null`、无 `[降级]`、标记文件不存在 | 不阻塞 1–5 |
+| 7. 账本与实际不符 | 历史通过（旧二进制，非最终） | 打印“账本记录与实际不符，重新安装”并真正重装 | actual_dir 更新 |
+| 8. InstallLocation 读取失败 | 历史通过（旧二进制，非最终） | 拒绝读取后未跳过、执行安装并标 unverified | 读取错误被折叠为“未找到” |
+| 9. 候选去重 | 历史通过（旧二进制，非最终） | 同路径去重为 1 并跳过；不同路径标 unverified 并列出候选 | HKLM/HKCU |
+| 10. 账本异常 | 历史通过（旧二进制，非最终） | 损坏/version>1 warning；不可写 warning 但安装继续 | 见证据 |
+| 11. 无 LocationReader | 未验证 | CLI 固定注入 RegistryLocationReader | 单测覆盖 |
+| 12. 回滚限制 | 部分通过（旧二进制，非最终） | 安装目录-only journal 无 PATH 快照；7-Zip 仍安装 | PATH 回滚沿用 2026-11-03 F7 |
+| 13. 重装失败报告 | 历史通过（alpha 455C，未用 6CFCA6 复跑） | `fail-setup.exe` 退出 1；报告 `status=failed`、failure_reason 可读；无账本 | 未出现 succeeded |
+
+> 场景 1–2 为 E87E 最终通过；场景 3 为 6CFCA6 历史；场景 4 部分通过（operator-reported）；场景 5 未完成；
+> 场景 6/13 为 alpha 455C 历史；
+> 场景 7–10 为旧二进制历史；
+> 场景 11 未验证；场景 12 部分通过。完整证据见
+> `docs/evidence/install-dir-20261115.md` 与 `docs/evidence/install-dir-20261115/`。
+> P2 最终二进制 `E1602A...`：只增加 CLI 退出码映射/测试，apply 行为与 `E87EBB...` 相同；
+> 7zip 本地含空格目录两次 apply 通过，Git/NPP 本地目录被拒绝；winget 首次 apply 被源超时打断，
+> 场景 5 只能用 `6CFCA6...` 历史结果，不能写成最终二进制通过。
+> 第 124 行保持未勾选：安装目录变更不提供自动卸载回滚；PATH 回滚本轮未重跑，
+> 沿用 2026-11-03 F7 结果。
+
+## 12. VM 执行顺序（F0–F8，按序勾选，每场景单独记录）
 
 > 前置：E1–E5 完成（干净快照 `VM-CLEAN`、便携目录、2–3 个小安装包、网络可切换、winget 可用）。
 > 每场景结束回到 `VM-CLEAN`；记录表列：场景 / 结果（通过·未通过·模拟）/ 关键输出 / 备注。
@@ -117,8 +166,8 @@
       不逐包超时；报告里能看到网络标记。
 - [x] **F4 单包失败降级**：一个 winget 装不上（不存在的 id）+ 本地包存在 → **逐包**降级，不是整级。
 - [x] **F5 manual 可读**：无法自动安装的项标 manual，人工步骤可复制（含 `fnm install 21` 这类命令）。
-- [x] **F6 expect_reboot 续跑**：无害配方 + `expect_reboot: true` → `awaiting_reboot`、文案正确、
-      重启后重跑靠幂等跳过。VS 2026 真装单列为可选长任务，**不阻塞验收**。
+- [ ] **F6 expect_reboot 续跑**：无害配方 + `expect_reboot: true` → `awaiting_reboot`、文案正确、
+      重启后重跑靠账本跳过。2026-11-15 alpha 场景 4 为 operator-reported，未由仓库工件独立确认；VS 2026 真装单列为可选长任务。
 - [x] **F7 PATH 与回滚**：1–2 个软件产生的 PATH 变更；备份落点正确、值类型不变、
       rollback 后与本机快照 SHA256 一致。
 - [x] **F8 缺 winget（模拟）**：无法真卸载 App Installer 时用环境变量模拟，
@@ -140,7 +189,7 @@
 | F3 | 通过 | `restore-20261103-115627.md`：Git / local / succeeded / “网络不可达，winget 级整级跳过（D7）” | `ENVLIFT_NET_PROBE=127.0.0.1:1` |
 | F4 | 通过（修复后） | `restore-20261103-125430.md`：fake winget id 失败后 `[降级]` 本地 Git / local / succeeded | 新增结构化 `fallback_plan` |
 | F5 | 通过（修复后） | `restore-20261103-123332.md` §4 输出 SOLIDWORKS 的账号/安装器/许可步骤 | 报告 §4 原先只写“需按官方方式手动安装” |
-| F6 | 部分通过 | `restore-20261103-121853.md`：等待重启=是；`restore-20261103-122449.md`：复跑 skipped 1 | **真实重启未执行**（VM 停在锁屏，避免锁屏无法回桌面）；状态机与幂等已验证 |
+| F6 | 部分通过（operator-reported） | 第一次停在重启并写账本；重启后第二次 `skipped` | 2026-11-15 alpha 场景 4 未由仓库工件独立确认 `LastBootUpTime` |
 | F7 | 通过 | HKCU 86→107→86 字符；HKLM 188→212→188；回滚前后 SHA256 完全一致，类型仍为 `ExpandString` | journal `…-122745.json` |
 | F8 | 通过（模拟） | `restore-20261103-123004.md`：Git / local / succeeded / “winget 不可用，整级跳过（D7）” | **模拟**，未真卸载 App Installer |
 | G2 | 通过 | F1 Git(winget) vs F3 Git(local)：层级变化 1 条、版本变化 1 条、状态变化 0 条 | UI diff 截图（本机复验产物，未随仓库分发） |

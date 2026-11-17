@@ -348,3 +348,86 @@ func TestUnparsedVersionIsMarked(t *testing.T) {
 		t.Errorf("执行前版本应保留: %q", it.BeforeVersion)
 	}
 }
+
+func TestReportCarriesInstallDirAndMarkdownColumn(t *testing.T) {
+	p := samplePlan()
+	p.Items[0].InstallDir = `D:\Apps\Git`
+	p.Items[0].InstallDirApplied = true
+	p.Items[0].Reinstall = true
+	p.Items[0].VerifyCmd = "git --version"
+
+	doc := Build(Input{Plan: p}, time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
+	if doc.Items[0].InstallDir != `D:\Apps\Git` || !doc.Items[0].InstallDirApplied {
+		t.Errorf("报告未保留安装目录: %+v", doc.Items[0])
+	}
+	if !doc.Items[0].Reinstall {
+		t.Error("报告应标记重装")
+	}
+	md := RenderMarkdown(doc)
+	if !strings.Contains(md, "安装目录") {
+		t.Error("markdown 表缺少「安装目录」列")
+	}
+	if !strings.Contains(md, `D:\Apps\Git`) {
+		t.Error("markdown 未显示安装目录")
+	}
+	if !strings.Contains(md, "重装") {
+		t.Error("markdown 未标记重装")
+	}
+	if !strings.Contains(md, "verify 命令可能仍指向旧路径") {
+		t.Error("指定目录且存在 verify 时应在风险提示中提醒")
+	}
+}
+
+func TestReportShowsInstallDirVerified(t *testing.T) {
+	p := samplePlan()
+	p.Items[0].InstallDir = `D:\Apps\Git`
+	p.Items[0].InstallDirApplied = true
+	doc := Build(Input{
+		Plan: p,
+		Steps: []apply.Step{{Index: 0, Kind: "software", Status: apply.StepOK,
+			InstallDirVerified: true, InstallDirActual: `D:\Apps\Git`}},
+	}, time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
+
+	if !doc.Items[0].InstallDirVerified {
+		t.Error("报告应保留目录已验证状态")
+	}
+	if !strings.Contains(RenderMarkdown(doc), "目录已验证") {
+		t.Error("markdown 应显示目录已验证")
+	}
+}
+
+func TestReportShowsInstallDirUnverifiedActual(t *testing.T) {
+	p := samplePlan()
+	p.Items[0].InstallDir = `D:\Apps\Git`
+	p.Items[0].InstallDirApplied = true
+	doc := Build(Input{
+		Plan: p,
+		Steps: []apply.Step{{Index: 0, Kind: "software", Status: apply.StepOK,
+			InstallDirVerified: false, InstallDirActual: `D:\Other`}},
+	}, time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
+
+	if doc.Items[0].InstallDirVerified || doc.Items[0].InstallDirActual != `D:\Other` {
+		t.Errorf("报告应保留未验证与实际目录: %+v", doc.Items[0])
+	}
+	md := RenderMarkdown(doc)
+	if !strings.Contains(md, "目录未验证") || !strings.Contains(md, `实际：D:\Other`) {
+		t.Errorf("markdown 应显示未验证与实际目录: %s", md)
+	}
+}
+
+// 账本命中时计划本身已带 actual_dir；没有 apply 步骤也要能进报告。
+func TestReportCarriesPlanInstallDirActual(t *testing.T) {
+	p := samplePlan()
+	p.Items[0].InstallDir = `D:\Apps\Git`
+	p.Items[0].InstallDirApplied = true
+	p.Items[0].InstallDirVerified = true
+	p.Items[0].InstallDirActual = `D:\Apps\Git`
+
+	doc := Build(Input{Plan: p}, time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
+	if doc.Items[0].InstallDirActual != `D:\Apps\Git` {
+		t.Errorf("报告应从计划带出实际目录: %+v", doc.Items[0])
+	}
+	if !strings.Contains(RenderMarkdown(doc), "目录已验证") {
+		t.Error("markdown 应显示目录已验证")
+	}
+}

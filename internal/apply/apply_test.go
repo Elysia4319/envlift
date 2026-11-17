@@ -1,6 +1,7 @@
 package apply
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/Elysia4319/envlift/internal/pathmgmt"
 	"github.com/Elysia4319/envlift/internal/plan"
+	"github.com/Elysia4319/envlift/internal/relocation"
 )
 
 // C8：全部用假执行器与假 PATH 管理器，单测不装任何软件、不改本机 PATH。
@@ -18,6 +20,31 @@ import (
 type fakeExec struct {
 	calls   []string
 	results map[string]ExecResult
+}
+
+type fakeLocations struct {
+	loc   string
+	found bool
+	err   error
+}
+
+func (f fakeLocations) InstallLocation(string) (string, bool, error) {
+	return f.loc, f.found, f.err
+}
+
+type fakeLocationCandidates struct {
+	locs []string
+}
+
+func (f fakeLocationCandidates) InstallLocation(string) (string, bool, error) {
+	if len(f.locs) == 1 {
+		return f.locs[0], true, nil
+	}
+	return "", false, nil
+}
+
+func (f fakeLocationCandidates) InstallLocations(string) ([]string, error) {
+	return f.locs, nil
 }
 
 func (f *fakeExec) Run(_ context.Context, command string, _ time.Duration) ExecResult {
@@ -107,6 +134,517 @@ func TestApplySkipsWhenVerifyPasses(t *testing.T) {
 		if strings.HasPrefix(c, "winget install") {
 			t.Error("已完成时不应执行安装命令")
 		}
+	}
+}
+
+// 指定安装目录意味着重装：即使 verify 已通过，也必须执行安装命令。
+func TestApplyReinstallsWhenInstallDirApplied(t *testing.T) {
+	ex := &fakeExec{results: map[string]ExecResult{
+		"git --version": {ExitCode: 0, Output: "git version 2.56.0"},
+		"install-git":   {ExitCode: 0, Output: "installed"},
+	}}
+	p := testPlan(plan.Item{
+		Kind: "software", Name: "Git", Status: plan.StatusPlanned, Tier: plan.TierLocal,
+		Command: "install-git", VerifyCmd: "git --version", VerifyExpect: "git version",
+		InstallDir: `D:\Apps\Git`, InstallDirApplied: true, Reinstall: true,
+	})
+	var out bytes.Buffer
+	o := baseOpts(t, p, ex, &fakePaths{})
+	o.Out = &out
+
+	res, err := Run(o)
+	if err != nil {
+		t.Fatalf("Run 失败: %v", err)
+	}
+	if res.Skipped != 0 || res.Executed != 1 {
+		t.Fatalf("指定目录后应重装而不是跳过: %+v", res)
+	}
+	if !strings.Contains(out.String(), "[重装] Git") {
+		t.Errorf("缺少重装日志: %s", out.String())
+	}
+	if len(ex.calls) == 0 || ex.calls[0] != "install-git" {
+		t.Errorf("应直接执行安装命令，实际调用: %v", ex.calls)
+	}
+
+	loaded, err := LoadJournal(o.Journal.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Steps) != 1 || !loaded.Steps[0].Reinstall {
+		t.Errorf("journal 应记录 reinstall: %+v", loaded.Steps)
+	}
+}
+
+func TestApplyVerifiesInstallDir(t *testing.T) {
+	cases := []struct {
+		name     string
+		reader   LocationReader
+		verified bool
+		actual   string
+		output   string
+	}{
+		{
+			name:     "match",
+			reader:   fakeLocations{loc: `D:\Apps\Git\`, found: true},
+			verified: true, actual: `D:\Apps\Git\`, output: "已确认",
+		},
+		{
+			name:     "mismatch",
+			reader:   fakeLocations{loc: `D:\Other`, found: true},
+			verified: false, actual: `D:\Other`, output: "实际",
+		},
+		{
+			name:     "unknown",
+			reader:   fakeLocations{err: errors.New("拒绝访问")},
+			verified: false, output: "读取失败",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := testPlan(plan.Item{
+				Kind: "software", Name: "Git", Status: plan.StatusPlanned, Tier: plan.TierLocal,
+				Command: "install-git", InstallDir: `D:\Apps\Git`,
+				InstallDirApplied: true, Reinstall: true,
+			})
+			o := baseOpts(t, p, &fakeExec{}, &fakePaths{})
+			o.Locations = c.reader
+			var out bytes.Buffer
+			o.Out = &out
+
+			if _, err := Run(o); err != nil {
+				t.Fatalf("Run 失败: %v", err)
+			}
+			loaded, err := LoadJournal(o.Journal.Path())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(loaded.Steps) != 1 {
+				t.Fatalf("steps = %d", len(loaded.Steps))
+			}
+			st := loaded.Steps[0]
+			if st.InstallDirVerified != c.verified || st.InstallDirActual != c.actual {
+				t.Errorf("目录验证记录不对: %+v", st)
+			}
+			if !strings.Contains(st.Output, c.output) {
+				t.Errorf("Step 输出应包含 %q: %q", c.output, st.Output)
+			}
+		})
+	}
+}
+
+func TestApplyRuntimeInstallDirIsUnverified(t *testing.T) {
+	p := testPlan(plan.Item{
+		Kind: "runtime", Name: "node", Status: plan.StatusPlanned, Tier: plan.TierLocal,
+		Command: "install-node", InstallDir: `D:\Apps\node`,
+		InstallDirApplied: true, Reinstall: true,
+	})
+	o := baseOpts(t, p, &fakeExec{}, &fakePaths{})
+	o.Locations = fakeLocations{loc: `D:\Apps\node`, found: true}
+	if _, err := Run(o); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadJournal(o.Journal.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := loaded.Steps[0]
+	if st.InstallDirVerified || !strings.Contains(st.Output, "runtime 目录验证暂不支持") {
+		t.Errorf("runtime 应标未验证: %+v", st)
+	}
+}
+
+func TestApplyAmbiguousInstallDirIsUnverified(t *testing.T) {
+	p := testPlan(plan.Item{
+		Kind: "software", Name: "Git", Status: plan.StatusPlanned, Tier: plan.TierLocal,
+		Command: "install-git", InstallDir: `D:\Apps\Git`,
+		InstallDirApplied: true, Reinstall: true,
+	})
+	o := baseOpts(t, p, &fakeExec{}, &fakePaths{})
+	o.Locations = fakeLocationCandidates{locs: []string{`D:\Apps\Git`, `C:\Apps\Git`}}
+	if _, err := Run(o); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadJournal(o.Journal.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := loaded.Steps[0]
+	if st.InstallDirVerified || !strings.Contains(st.InstallDirActual, " | ") {
+		t.Errorf("同名多候选应标 unverified + 候选: %+v", st)
+	}
+}
+
+func TestApplyWritesRelocationLedger(t *testing.T) {
+	path := filepath.Join(t.TempDir(), relocation.DefaultPath)
+	p := testPlan(plan.Item{
+		TargetID: "a1", Kind: "software", Name: "Git", Status: plan.StatusPlanned,
+		Tier: plan.TierLocal, Command: "install-git", InstallDir: `D:\Apps\Git`,
+		InstallDirApplied: true, Reinstall: true,
+	})
+	o := baseOpts(t, p, &fakeExec{}, &fakePaths{})
+	o.Locations = fakeLocations{loc: `D:\Apps\Git`, found: true}
+	o.Relocations = relocation.New()
+	o.RelocationPath = path
+
+	if _, err := Run(o); err != nil {
+		t.Fatalf("Run 失败: %v", err)
+	}
+	l, err := relocation.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, ok := l.Find("a1", `d:/apps/git/`)
+	if !ok || !e.Verified || e.LastCommand != "install-git" || e.ActualDir != `D:\Apps\Git` {
+		t.Fatalf("账本记录不对: %+v / %v", e, ok)
+	}
+}
+
+func TestApplyFailureDoesNotWriteRelocationLedger(t *testing.T) {
+	path := filepath.Join(t.TempDir(), relocation.DefaultPath)
+	p := testPlan(plan.Item{
+		TargetID: "a1", Kind: "software", Name: "Git", Status: plan.StatusPlanned,
+		Tier: plan.TierLocal, Command: "install-git", InstallDir: `D:\Apps\Git`,
+		InstallDirApplied: true, Reinstall: true,
+	})
+	ex := &fakeExec{results: map[string]ExecResult{"install-git": {ExitCode: 1, Output: "boom"}}}
+	o := baseOpts(t, p, ex, &fakePaths{})
+	o.Locations = fakeLocations{loc: `D:\Apps\Git`, found: true}
+	o.Relocations = relocation.New()
+	o.RelocationPath = path
+	if _, err := Run(o); err != nil {
+		t.Fatalf("Run 失败: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("失败不应写账本，stat err=%v", err)
+	}
+}
+
+func TestApplyExpectRebootWritesRelocationLedger(t *testing.T) {
+	path := filepath.Join(t.TempDir(), relocation.DefaultPath)
+	p := testPlan(plan.Item{
+		TargetID: "a1", Kind: "software", Name: "Git", Status: plan.StatusPlanned,
+		Tier: plan.TierLocal, Command: "install-git", InstallDir: `D:\Apps\Git`,
+		InstallDirApplied: true, Reinstall: true, ExpectReboot: true,
+	})
+	o := baseOpts(t, p, &fakeExec{}, &fakePaths{})
+	o.Locations = fakeLocations{loc: `D:\Apps\Git`, found: true}
+	o.Relocations = relocation.New()
+	o.RelocationPath = path
+	res, err := Run(o)
+	if err != nil {
+		t.Fatalf("Run 失败: %v", err)
+	}
+	if !strings.Contains(res.Stopped, "重启") {
+		t.Fatalf("应停在重启: %+v", res)
+	}
+	l, err := relocation.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := l.Find("a1", `D:\Apps\Git`); !ok {
+		t.Fatal("expect_reboot 成功后应先写账本")
+	}
+}
+
+func TestApplySecondRunSkipsWhenLedgerMatch(t *testing.T) {
+	p := testPlan(plan.Item{
+		TargetID: "a1", Kind: "software", Name: "Git", Status: plan.StatusPlanned,
+		Tier: plan.TierLocal, Command: "install-git", VerifyCmd: "git --version",
+		VerifyExpect: "git version", InstallDir: `D:\Apps\Git`,
+		InstallDirApplied: true, Reinstall: false,
+	})
+	ex := &fakeExec{results: map[string]ExecResult{"git --version": {ExitCode: 0, Output: "git version 2.56.0"}}}
+	o := baseOpts(t, p, ex, &fakePaths{})
+	o.Locations = fakeLocations{loc: `D:\Apps\Git`, found: true}
+	o.Relocations = relocation.New()
+	o.RelocationPath = filepath.Join(t.TempDir(), relocation.DefaultPath)
+	res, err := Run(o)
+	if err != nil {
+		t.Fatalf("Run 失败: %v", err)
+	}
+	if res.Skipped != 1 || res.Executed != 0 {
+		t.Fatalf("第二次 apply 应跳过: %+v", res)
+	}
+	for _, c := range ex.calls {
+		if c == "install-git" {
+			t.Error("账本命中且 verify 通过时不应重装")
+		}
+	}
+}
+
+// 账本命中即跳过，不依赖 VerifyCmd；verified=false 或无读取器时标 unverified。
+func TestApplyLedgerHitSkipsWithoutVerify(t *testing.T) {
+	cases := []struct {
+		name         string
+		verified     bool
+		reader       LocationReader
+		wantVerified bool
+		wantOutput   string
+	}{
+		{
+			name: "verified-and-rechecked", verified: true,
+			reader:       fakeLocations{loc: `C:\Apps\7zip`, found: true},
+			wantVerified: true,
+		},
+		{
+			name: "ledger-unverified", verified: false,
+			reader:       fakeLocations{loc: `C:\Apps\7zip`, found: true},
+			wantVerified: false, wantOutput: "账本记录未验证",
+		},
+		{
+			name: "no-reader", verified: true, reader: nil,
+			wantVerified: false, wantOutput: "账本记录未复核",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := testPlan(plan.Item{
+				TargetID: "a1", Kind: "software", Name: "7-Zip", Status: plan.StatusPlanned,
+				Tier: plan.TierLocal, Command: "install-7zip", InstallDir: `C:\Apps\7zip`,
+				InstallDirApplied: true, InstallDirVerified: c.verified,
+			})
+			ex := &fakeExec{}
+			var out bytes.Buffer
+			o := baseOpts(t, p, ex, &fakePaths{})
+			o.Out = &out
+			o.Locations = c.reader
+			o.Relocations = relocation.New()
+			o.RelocationPath = filepath.Join(t.TempDir(), relocation.DefaultPath)
+
+			res, err := Run(o)
+			if err != nil {
+				t.Fatalf("Run 失败: %v", err)
+			}
+			if res.Skipped != 1 || res.Executed != 0 {
+				t.Fatalf("账本命中应跳过: %+v", res)
+			}
+			for _, call := range ex.calls {
+				if call == "install-7zip" {
+					t.Fatal("账本命中不应执行安装")
+				}
+			}
+			loaded, err := LoadJournal(o.Journal.Path())
+			if err != nil {
+				t.Fatal(err)
+			}
+			st := loaded.Steps[0]
+			if st.Status != StepSkipped || st.InstallDirVerified != c.wantVerified {
+				t.Errorf("步骤状态不对: %+v", st)
+			}
+			if c.wantOutput != "" && !strings.Contains(st.Output, c.wantOutput) {
+				t.Errorf("步骤输出应含 %q: %q", c.wantOutput, st.Output)
+			}
+		})
+	}
+}
+
+// verified=true 但目录不符/读取失败时，即使没有 VerifyCmd 也必须重装。
+func TestApplyVerifiedLedgerMismatchReinstallsWithoutVerify(t *testing.T) {
+	cases := []struct {
+		name    string
+		reader  LocationReader
+		wantLog string
+	}{
+		{
+			name: "moved-dir", reader: fakeLocations{loc: `C:\Other\7zip`, found: true},
+			wantLog: "账本记录与实际不符，重新安装",
+		},
+		{
+			name: "read-failed", reader: fakeLocations{err: errors.New("拒绝访问")},
+			wantLog: "账本记录未复核（读取失败），重新安装",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := testPlan(plan.Item{
+				TargetID: "a1", Kind: "software", Name: "7-Zip", Status: plan.StatusPlanned,
+				Tier: plan.TierLocal, Command: "install-7zip", InstallDir: `C:\Apps\7zip`,
+				InstallDirApplied: true, InstallDirVerified: true,
+			})
+			ex := &fakeExec{results: map[string]ExecResult{"install-7zip": {ExitCode: 0}}}
+			var out bytes.Buffer
+			o := baseOpts(t, p, ex, &fakePaths{})
+			o.Out = &out
+			o.Locations = c.reader
+			o.Relocations = relocation.New()
+			o.RelocationPath = filepath.Join(t.TempDir(), relocation.DefaultPath)
+
+			res, err := Run(o)
+			if err != nil {
+				t.Fatalf("Run 失败: %v", err)
+			}
+			if res.Executed != 1 || res.Skipped != 0 {
+				t.Fatalf("目录不符/读取失败应重装: %+v", res)
+			}
+			if !strings.Contains(out.String(), c.wantLog) {
+				t.Errorf("缺少日志 %q: %s", c.wantLog, out.String())
+			}
+			found := false
+			for _, call := range ex.calls {
+				if call == "install-7zip" {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("应执行安装命令，实际: %v", ex.calls)
+			}
+		})
+	}
+}
+
+// 账本 verified 不能永久信任：跳过前必须按当前 InstallLocation 复核。
+func TestApplyRechecksVerifiedLedgerBeforeSkipping(t *testing.T) {
+	cases := []struct {
+		name     string
+		reader   LocationReader
+		skipped  int
+		executed int
+		verified bool
+		wantLog  string
+	}{
+		{
+			name: "same-dir", reader: fakeLocations{loc: `D:\Apps\Git`, found: true},
+			skipped: 1, verified: true,
+		},
+		{
+			name: "moved-dir", reader: fakeLocations{loc: `D:\Moved\Git`, found: true},
+			executed: 1, verified: false, wantLog: "账本记录与实际不符，重新安装",
+		},
+		{
+			name: "read-failed", reader: fakeLocations{err: errors.New("拒绝访问")},
+			executed: 1, verified: false, wantLog: "账本记录未复核（读取失败），重新安装",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			p := testPlan(plan.Item{
+				TargetID: "a1", Kind: "software", Name: "Git", Status: plan.StatusPlanned,
+				Tier: plan.TierLocal, Command: "install-git", VerifyCmd: "git --version",
+				VerifyExpect: "git version", InstallDir: `D:\Apps\Git`,
+				InstallDirApplied: true, InstallDirVerified: true,
+			})
+			ex := &fakeExec{results: map[string]ExecResult{
+				"git --version": {ExitCode: 0, Output: "git version 2.56.0"},
+				"install-git":   {ExitCode: 0, Output: "installed"},
+			}}
+			var out bytes.Buffer
+			o := baseOpts(t, p, ex, &fakePaths{})
+			o.Out = &out
+			o.Locations = c.reader
+			o.Relocations = relocation.New()
+			o.RelocationPath = filepath.Join(t.TempDir(), relocation.DefaultPath)
+
+			res, err := Run(o)
+			if err != nil {
+				t.Fatalf("Run 失败: %v", err)
+			}
+			if res.Skipped != c.skipped || res.Executed != c.executed {
+				t.Fatalf("结果不符: %+v", res)
+			}
+			if c.wantLog != "" && !strings.Contains(out.String(), c.wantLog) {
+				t.Errorf("缺少复核日志 %q: %s", c.wantLog, out.String())
+			}
+			loaded, err := LoadJournal(o.Journal.Path())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(loaded.Steps) != 1 {
+				t.Fatalf("steps = %d", len(loaded.Steps))
+			}
+			if loaded.Steps[0].InstallDirVerified != c.verified {
+				t.Errorf("目录验证状态 = %v，期望 %v: %+v",
+					loaded.Steps[0].InstallDirVerified, c.verified, loaded.Steps[0])
+			}
+		})
+	}
+}
+
+// 没有 LocationReader 时允许按账本跳过，但报告不能写成已验证。
+func TestApplyLedgerSkipWithoutReaderIsUnverified(t *testing.T) {
+	p := testPlan(plan.Item{
+		TargetID: "a1", Kind: "software", Name: "Git", Status: plan.StatusPlanned,
+		Tier: plan.TierLocal, Command: "install-git", VerifyCmd: "git --version",
+		VerifyExpect: "git version", InstallDir: `D:\Apps\Git`,
+		InstallDirApplied: true, InstallDirVerified: true,
+	})
+	ex := &fakeExec{results: map[string]ExecResult{
+		"git --version": {ExitCode: 0, Output: "git version 2.56.0"},
+	}}
+	var out bytes.Buffer
+	o := baseOpts(t, p, ex, &fakePaths{})
+	o.Out = &out
+	o.Relocations = relocation.New()
+	o.RelocationPath = filepath.Join(t.TempDir(), relocation.DefaultPath)
+
+	res, err := Run(o)
+	if err != nil {
+		t.Fatalf("Run 失败: %v", err)
+	}
+	if res.Skipped != 1 || res.Executed != 0 {
+		t.Fatalf("账本命中且无读取器时应允许跳过: %+v", res)
+	}
+	loaded, err := LoadJournal(o.Journal.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := loaded.Steps[0]
+	if st.InstallDirVerified || !strings.Contains(st.Output, "账本记录未复核") {
+		t.Errorf("无读取器时报告应标未复核: %+v", st)
+	}
+}
+
+// Run 内初始化的账本必须在整个批次复用；否则每个条目都会覆盖成最后一条。
+func TestApplyKeepsMultipleLedgerEntries(t *testing.T) {
+	path := filepath.Join(t.TempDir(), relocation.DefaultPath)
+	p := testPlan(
+		plan.Item{
+			TargetID: "a1", Kind: "software", Name: "Git", Status: plan.StatusPlanned,
+			Tier: plan.TierLocal, Command: "install-git", InstallDir: `D:\Apps\Git`,
+			InstallDirApplied: true, Reinstall: true,
+		},
+		plan.Item{
+			TargetID: "a2", Kind: "software", Name: "Node", Status: plan.StatusPlanned,
+			Tier: plan.TierLocal, Command: "install-node", InstallDir: `D:\Apps\node`,
+			InstallDirApplied: true, Reinstall: true,
+		},
+	)
+	o := baseOpts(t, p, &fakeExec{}, &fakePaths{})
+	o.Locations = fakeLocationCandidates{locs: []string{`D:\Apps`}}
+	o.RelocationPath = path
+
+	if _, err := Run(o); err != nil {
+		t.Fatalf("Run 失败: %v", err)
+	}
+	l, err := relocation.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(l.Relocations) != 2 {
+		t.Fatalf("账本应保留 2 条，实际 %d: %+v", len(l.Relocations), l.Relocations)
+	}
+}
+
+func TestApplyLedgerWriteFailureDoesNotFailInstall(t *testing.T) {
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p := testPlan(plan.Item{
+		TargetID: "a1", Kind: "software", Name: "Git", Status: plan.StatusPlanned,
+		Tier: plan.TierLocal, Command: "install-git", InstallDir: `D:\Apps\Git`,
+		InstallDirApplied: true, Reinstall: true,
+	})
+	o := baseOpts(t, p, &fakeExec{}, &fakePaths{})
+	o.Locations = fakeLocations{loc: `D:\Apps\Git`, found: true}
+	o.Relocations = relocation.New()
+	o.RelocationPath = filepath.Join(blocker, "ledger.yaml")
+	res, err := Run(o)
+	if err != nil {
+		t.Fatalf("账本写入失败不应让安装失败: %v", err)
+	}
+	if res.Executed != 1 || len(res.Warnings) == 0 || !strings.Contains(res.Warnings[0], "写入重装账本失败") {
+		t.Fatalf("应成功安装并产生账本 warning: %+v", res)
 	}
 }
 
@@ -567,6 +1105,10 @@ func TestSplitCommand(t *testing.T) {
 		want []string
 	}{
 		{`"C:\Program Files\x\setup.exe" /S`, []string{`C:\Program Files\x\setup.exe`, "/S"}},
+		{`"C:\setup.exe" /S /D=C:\Program Files\7-Zip`, []string{`C:\setup.exe`, "/S", `/D=C:\Program Files\7-Zip`}},
+		{`"C:\setup.exe" /S /D=D:\My Apps\7-Zip`, []string{`C:\setup.exe`, "/S", `/D=D:\My Apps\7-Zip`}},
+		{`"C:\setup.exe" /S /D="C:\Program Files\7-Zip"`, []string{`C:\setup.exe`, "/S", `/D=C:\Program Files\7-Zip`}},
+		{`"C:\setup.exe" /S /D="D:\My Apps\7-Zip"`, []string{`C:\setup.exe`, "/S", `/D=D:\My Apps\7-Zip`}},
 		{`winget install --id Git.Git --exact`, []string{"winget", "install", "--id", "Git.Git", "--exact"}},
 		{`git --version`, []string{"git", "--version"}},
 	}

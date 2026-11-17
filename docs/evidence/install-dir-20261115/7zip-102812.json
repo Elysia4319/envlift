@@ -1,0 +1,28 @@
+{
+  "app": "envlift",
+  "kind": "apply-journal",
+  "schema": 1,
+  "started_at": "2026-11-03T10:28:12+08:00",
+  "config_path": "envlift.yaml",
+  "steps": [
+    {
+      "index": 0,
+      "kind": "software",
+      "name": "7-Zip 25.01 (x64)",
+      "tier": "local",
+      "command": "\"C:\\envlift\\cases\\7zip-local\\installers\\7z2501-x64.exe\" /S /D=C:\\Apps\\7zip",
+      "needs_admin": true,
+      "expect_reboot": false,
+      "reinstall": true,
+      "install_dir_verified": true,
+      "install_dir_actual": "C:\\Apps\\7zip\\",
+      "exit_code": 0,
+      "output": "--- 安装目录验证 ---\n已确认: C:\\Apps\\7zip\\",
+      "status": "ok",
+      "started_at": "2026-11-03T10:28:12+08:00",
+      "finished_at": "2026-11-03T10:28:13+08:00",
+      "actual_version": "25.01"
+    }
+  ],
+  "finished": true
+}

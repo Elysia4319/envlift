@@ -1,0 +1,58 @@
+{
+  "report_schema": 1,
+  "kind": "restore-report",
+  "generated_at": "2026-11-03T10:27:19+08:00",
+  "config_path": "envlift.yaml",
+  "journal": "reports\\.envlift-journal-20261103-102638.json",
+  "env": {
+    "os": "Windows 11",
+    "build": "26300",
+    "arch": "amd64",
+    "username": "${USER}",
+    "hostname": "${HOST}",
+    "winget_ok": true,
+    "network_ok": true,
+    "elevated": true
+  },
+  "plan_hash": "dfc7cb50e0245240905bd11b3836bba5f4b104f90bf0af82dc29f7a4768f7bcb",
+  "mode": "apply",
+  "summary": {
+    "total": 1,
+    "succeeded": 0,
+    "skipped": 0,
+    "manual": 0,
+    "blocked_needs_decision": 0,
+    "failed": 1,
+    "path_writes": 0,
+    "awaiting_reboot": false
+  },
+  "items": [
+    {
+      "target_id": "5f35cbacae03",
+      "kind": "software",
+      "name": "Fallback App",
+      "expected_version": "1.0",
+      "tier": "winget",
+      "status": "failed",
+      "command": "winget install --id Vendor.DoesNotExist --exact --silent --accept-package-agreements --accept-source-agreements --location \"C:\\Apps\\fallback\" --force",
+      "exit_code": 2316632084,
+      "verify_result": "not_run",
+      "failure_reason": "- \r   \\ \r   | \r   / \r   - \r   \\ \r   | \r   / \r   - \r   \\ \r   | \r   / \r   - \r   \\ \r   | \r   / \r   - \r   \\ \r   | \r   / \r   - \r   \\ \r   | \r   / \r   - \r   \\ \r   | \r   / \r   - \r   \\ \r   | \r   / \r   - \r   \\ \r   | \r   / \r                                                                                                                        \r\r  ███████▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒  1024 KB / 3.81 MB\r  ███████████████▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒  2.00 MB / 3.81 MB\r  ███████████████████████▒▒▒▒▒▒▒  3.00 MB / 3.81 MB\r  ██████████████████████████████  3.81 MB / 3.81 MB\r                                                                                                                        \r\r  ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒  0%\r  ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒  0%\r  ███████████████████████████▒▒▒  92%\r  ██████████████████████████████  100%\r                                                                                                                        \rThe `msstore` source requires that you view the following agreements before using.\r\nTerms of Transaction: https://aka.ms/microsoft-store-terms-of-transaction\r\nThe source requires the current machine's 2-letter geographic region to be sent to the backend service to function properly (ex. \"US\").\r\n\r\nNo package found matching input criteria.",
+      "needs_admin": true,
+      "expect_reboot": false,
+      "decision": "set_location",
+      "reason": "按决策指定安装目录 C:\\Apps\\fallback",
+      "install_dir": "C:\\Apps\\fallback",
+      "install_dir_applied": true,
+      "reinstall": true
+    }
+  ],
+  "path_changes": [],
+  "warnings": null,
+  "decisions": {
+    "apply_mode": "all",
+    "actions": {
+      "set_location": 1
+    }
+  }
+}

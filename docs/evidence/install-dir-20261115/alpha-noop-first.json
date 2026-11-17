@@ -1,0 +1,59 @@
+{
+  "report_schema": 1,
+  "kind": "restore-report",
+  "generated_at": "2026-11-03T10:26:31+08:00",
+  "config_path": "envlift.yaml",
+  "journal": "reports\\.envlift-journal-20261103-102630.json",
+  "env": {
+    "os": "Windows 11",
+    "build": "26300",
+    "arch": "amd64",
+    "username": "${USER}",
+    "hostname": "${HOST}",
+    "winget_ok": true,
+    "network_ok": true,
+    "elevated": false
+  },
+  "plan_hash": "354075805a536b31336f373396e51f65b74c0fd6eb10916aa30c2bbf858a9b72",
+  "mode": "apply",
+  "summary": {
+    "total": 1,
+    "succeeded": 1,
+    "skipped": 0,
+    "manual": 0,
+    "blocked_needs_decision": 0,
+    "failed": 0,
+    "path_writes": 0,
+    "awaiting_reboot": true
+  },
+  "items": [
+    {
+      "target_id": "dd4cecd44ca2",
+      "kind": "software",
+      "name": "Noop Reboot",
+      "expected_version": "1.0",
+      "version_unparsed": true,
+      "tier": "local",
+      "status": "succeeded",
+      "command": "\"C:\\envlift\\cases\\noop-reboot\\installers\\noop-reboot-setup.exe\" /noop /DIR=C:\\Apps\\noop",
+      "exit_code": 0,
+      "verify_result": "pass",
+      "needs_admin": false,
+      "expect_reboot": true,
+      "decision": "set_location",
+      "reason": "按决策指定安装目录 C:\\Apps\\noop",
+      "install_dir": "C:\\Apps\\noop",
+      "install_dir_applied": true,
+      "reinstall": true,
+      "verify_command_present": true
+    }
+  ],
+  "path_changes": [],
+  "warnings": null,
+  "decisions": {
+    "apply_mode": "all",
+    "actions": {
+      "set_location": 1
+    }
+  }
+}

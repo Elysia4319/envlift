@@ -1,0 +1,57 @@
+{
+  "report_schema": 1,
+  "kind": "restore-report",
+  "generated_at": "2026-11-03T10:27:06+08:00",
+  "config_path": "envlift.yaml",
+  "journal": "reports\\.envlift-journal-20261103-102645.json",
+  "env": {
+    "os": "Windows 11",
+    "build": "26300",
+    "arch": "amd64",
+    "username": "${USER}",
+    "hostname": "${HOST}",
+    "winget_ok": true,
+    "network_ok": true,
+    "elevated": true
+  },
+  "plan_hash": "159af39228f7ab5a64865a39c10238057e88fdfe4fa7106bc1f92f2dba405c4e",
+  "mode": "apply",
+  "summary": {
+    "total": 1,
+    "succeeded": 1,
+    "skipped": 0,
+    "manual": 0,
+    "blocked_needs_decision": 0,
+    "failed": 0,
+    "path_writes": 0,
+    "awaiting_reboot": false
+  },
+  "items": [
+    {
+      "target_id": "c5a3fea82daa",
+      "kind": "software",
+      "name": "Notepad++ (64-bit x64)",
+      "expected_version": "8.8.1",
+      "tier": "local",
+      "status": "succeeded",
+      "command": "\"C:\\envlift\\cases\\npp-builtin-space\\installers\\npp.8.8.1.Installer.exe\" /S /D=C:\\My Apps\\Notepad++",
+      "exit_code": 0,
+      "verify_result": "not_run",
+      "needs_admin": true,
+      "expect_reboot": false,
+      "decision": "set_location",
+      "reason": "按决策指定安装目录 C:\\My Apps\\Notepad++",
+      "install_dir": "C:\\My Apps\\Notepad++",
+      "install_dir_applied": true,
+      "reinstall": true
+    }
+  ],
+  "path_changes": [],
+  "warnings": null,
+  "decisions": {
+    "apply_mode": "all",
+    "actions": {
+      "set_location": 1
+    }
+  }
+}

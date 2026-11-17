@@ -1,0 +1,59 @@
+{
+  "report_schema": 1,
+  "kind": "restore-report",
+  "generated_at": "2026-11-03T10:26:46+08:00",
+  "config_path": "envlift.yaml",
+  "journal": "reports\\.envlift-journal-20261103-102640.json",
+  "env": {
+    "os": "Windows 11",
+    "build": "26300",
+    "arch": "amd64",
+    "username": "${USER}",
+    "hostname": "${HOST}",
+    "winget_ok": true,
+    "network_ok": true,
+    "elevated": true
+  },
+  "plan_hash": "a94db86cc94f0881f97ab785be8c2ce11856efa1403db8d268e806f3fecfc994",
+  "mode": "apply",
+  "summary": {
+    "total": 1,
+    "succeeded": 1,
+    "skipped": 0,
+    "manual": 0,
+    "blocked_needs_decision": 0,
+    "failed": 0,
+    "path_writes": 0,
+    "awaiting_reboot": false
+  },
+  "items": [
+    {
+      "target_id": "d9b22a3aae5c",
+      "kind": "software",
+      "name": "7-Zip 25.01 (x64)",
+      "expected_version": "25.01",
+      "tier": "local",
+      "status": "succeeded",
+      "command": "\"C:\\envlift\\cases\\7zip-builtin-space\\installers\\7z2501-x64.exe\" /S /D=C:\\My Apps\\7zip",
+      "exit_code": 0,
+      "verify_result": "not_run",
+      "needs_admin": true,
+      "expect_reboot": false,
+      "decision": "set_location",
+      "reason": "按决策指定安装目录 C:\\My Apps\\7zip",
+      "install_dir": "C:\\My Apps\\7zip",
+      "install_dir_applied": true,
+      "reinstall": true,
+      "install_dir_verified": true,
+      "install_dir_actual": "C:\\My Apps\\7zip\\"
+    }
+  ],
+  "path_changes": [],
+  "warnings": null,
+  "decisions": {
+    "apply_mode": "all",
+    "actions": {
+      "set_location": 1
+    }
+  }
+}

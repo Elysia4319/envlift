@@ -1,0 +1,3 @@
+﻿PING_CDN=True
+PING_GITHUB=False
+SOURCES=Name    Argument                                      Explicit | -------------------------------------------------------------- | msstore https://storeedgefd.dsx.mp.microsoft.com/v9.0 false | winget  https://cdn.winget.microsoft.com/cache        false

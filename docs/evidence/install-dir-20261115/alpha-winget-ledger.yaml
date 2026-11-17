@@ -1,0 +1,7 @@
+version: 1
+relocations:
+    - target_id: d9b22a3aae5c
+      install_dir: C:\Apps\7zip-winget
+      verified: false
+      completed_at: "2026-11-03T10:28:27+08:00"
+      last_command: winget install --id 7zip.7zip --exact --silent --accept-package-agreements --accept-source-agreements --location "C:\Apps\7zip-winget" --force

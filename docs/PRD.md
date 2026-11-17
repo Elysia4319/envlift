@@ -491,6 +491,9 @@ envlift\
 | `winget_ids` | []string | **最强锚点**（M1）。winget id 规范化、稳定、不带版本与厂商噪声 |
 | `aliases` | []string | 规范化后精确匹配的别名 |
 | `match_display` | string | 对 DisplayName 的 Go RE2 正则，建议带 `(?i)` 并锚定 |
+| `install_dir_arg` | string | 本地安装包追加的目录参数模板，`{install_dir}` 表示用户选择的目录；空表示不支持 |
+| `winget_location_arg` | string | winget 追加的目录参数模板（如 `--location "{install_dir}"`）；空表示不支持 |
+| `install_dir_source` | string | 上述模板的依据：官方文档链接或本机 `--help` 实测；模板非空时必填 |
 
 ### 10.3 四级锚点（M2）
 
@@ -504,6 +507,34 @@ envlift\
 配方的 `name` 只作条目标识，**不参与 DisplayName 匹配**——两件事分开，避免「配方改名就匹配不上」。
 
 命中依据写入计划的 `matched_by`（`winget_id` / `alias` / `display_regex` / `name` / `none`），这是 M5 要求的可审计字段。
+
+### 10.2.1 `set_location` 决策
+
+对 `planned` 且层级为 `local` / `winget` 的条目，可用决策
+`{action: "set_location", params: {install_dir: "D:\\Apps\\Git"}}` 指定安装目录。
+
+- 只使用配方显式声明的模板，不猜参数；两个模板都为空时拒绝。
+- `winget` 条目要求 `winget_location_arg` 非空；`local` 条目要求 `install_dir_arg` 非空。
+- `install_dir` 与 `path.rewrite` 共用路径校验：必须是盘符开头的绝对路径或 UNC，盘符必须存在。
+- 安装目录只是决策参数，不进入 `target_id`（D23）；不设置时计划与命令保持原样。
+- 指定目录视为重装：即使 verify 已通过也继续执行安装；winget 重装命令追加 `--force`。
+- 若本机 winget 的 `install --help` 不含 `--force`，计划标 blocked，不猜测替代参数。
+- 当前版本不支持 `select{installer}` / `select{recipe}` 与 `set_location` 组合；请先选安装包/配方，再单独指定目录。
+- Git 与 Notepad++ 的本地目录参数尚未验证，内置配方不声明 `install_dir_arg` / `winget_location_arg`；`set_location` 会被拒绝，GUI 目录输入禁用。
+- winget `--location` 是包级 best-effort，是否生效取决于包本身，必须 VM 验证。
+- winget 失败后若本地配方没有 `install_dir_arg`，不保留可执行降级方案，避免装到默认目录。
+- 安装目录变更不提供自动卸载回滚；回滚只覆盖 PATH。
+- 安装后读取注册表 `InstallLocation` 校验落点；读不到或不一致时报告标 `unverified`，不把安装判失败。
+- `set_location` 成功后写入本地 `envlift.relocations.yaml`；同一 target_id + 归一化目录命中账本即跳过安装，不再依赖 verify。
+- 账本条目保存 `install_dir` 与 `actual_dir`；`actual_dir` 是安装后实测值，读不到时留空，不猜。
+- 账本 `verified=true` 只代表上次验证结果。apply 在跳过前重新读取 `InstallLocation`：与账本目录一致才跳过；不一致时打印“账本记录与实际不符，重新安装”并重新安装；读取失败时也重新安装并标 `unverified`。
+- 账本 `verified=false` 或未配置 `LocationReader` 时仍按账本跳过，但报告必须标 `unverified` /“账本记录未验证/未复核”，不能显示成已验证。
+- 同名软件的 `InstallLocation` 候选按归一化路径去重，保留首个原始值；去重后仍有多个不同路径时标 `unverified` 并列出候选。
+- 账本 `version > 1` 时 `relocation.Load` 返回“账本版本高于本程序支持”，不静默读取。
+- 账本是本地状态，不入库；账本读取失败按空账本继续并 warning，写入失败不把安装判失败。
+- 改目录或删除账本条目才会再次重装；账本 `verified=false` 不会自动重试。
+- runtime 条目暂不支持注册表目录验证；同名多版本可能标 `unverified` 并列出候选。
+- winget 缺 `--force` 时当前实现是整批 blocked，不只是跳过单个条目。
 
 ### 10.4 规范化（M3）
 

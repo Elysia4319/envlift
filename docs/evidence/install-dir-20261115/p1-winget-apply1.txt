@@ -1,0 +1,55 @@
+警告: 配置中不含 ${USER}/${HOST} 占位符，判定为 --raw 导出。
+      路径将按字面值还原，不会猜测原机器的用户名/主机名。
+      需要重写时请显式指定 --from-user <旧用户名> --from-host <旧主机名>。
+
+envlift restore — 预演（未执行任何操作）
+配置 envlift.yaml · schema v1 · 生成于 2026-11-03T10:27:29+08:00
+注意 配置不含占位符（--raw 导出），按字面值还原
+
+环境预检
+  目标机      Windows 11 (build 26300) / amd64
+  用户        xiaoluo@ENVLIFT-VM
+  权限        管理员运行
+  winget      可用 v1.11.510
+  网络        可达
+  安装包      installers 下 0 个文件，命中 0 个配方 · 配方表 33 条
+
+执行计划（按执行顺序）
+   1. [software] 7-Zip 25.01 (x64)
+      期望 25.01 / 当前 -
+      层级 winget
+      配方 7zip（来源 builtin，验证于 -）
+      命令 winget install --id 7zip.7zip --exact --silent --accept-package-agreements --accept-source-agreements --location "C:\Apps\7zip-winget" --force
+      需要 管理员运行（执行时逐项询问）
+      校验 全局三级校验
+      降级 失败后标 manual（installers/ 中无匹配安装包）
+      说明 按决策指定安装目录 C:\Apps\7zip-winget
+
+PATH 变更
+  备份落点 reports/path-backup-20261103-102729.json（执行时生成，另有同名 .reg）
+  用户级
+    （无）
+  系统级
+    （无）
+
+待确认与风险
+  - 7-Zip 25.01 (x64)：内置配方缺少 verified_at，可能已过期
+  - 7-Zip 25.01 (x64)：需要管理员运行
+
+汇总
+  winget 1 · 本地包 0 · manual 0 · 跳过 0 · 待确认 0 · 因未决策跳过 0
+
+即将执行 1 项，其中 1 项需管理员运行，0 项将触发重启。
+PATH 变更 0 条。
+
+这是真实执行，会改动系统。确认请输入 APPLY（区分大小写）: 事务日志: reports\.envlift-journal-20261103-102729.json
+
+条目 7-Zip 25.01 (x64) 需要管理员运行，执行: winget install --id 7zip.7zip --exact --silent --accept-package-agreements --accept-source-agreements --location "C:\Apps\7zip-winget" --force [y/N]:   [重装] 7-Zip 25.01 (x64) —— 指定了安装目录，跳过幂等检查
+  [执行] 7-Zip 25.01 (x64) —— winget install --id 7zip.7zip --exact --silent --accept-package-agreements --accept-source-agreements --location "C:\Apps\7zip-winget" --force
+  [目录] 7-Zip 25.01 (x64) —— 未验证（未找到 InstallLocation）
+
+执行完成: 成功 1 · 跳过 0 · 失败 0 · 阻止 0 · PATH 新增 0
+回滚命令: envlift restore --rollback --journal "reports\.envlift-journal-20261103-102729.json"
+报告: reports\restore-20261103-102808.md
+      reports\restore-20261103-102808.json
+EXIT=0 

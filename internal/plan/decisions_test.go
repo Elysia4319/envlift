@@ -8,6 +8,8 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/Elysia4319/envlift/internal/config"
+	"github.com/Elysia4319/envlift/internal/recipes"
+	"github.com/Elysia4319/envlift/internal/relocation"
 	"github.com/Elysia4319/envlift/internal/targetid"
 )
 
@@ -180,6 +182,9 @@ func TestDecisionSelectInstaller(t *testing.T) {
 	if gi.CandidateKind != "" || len(gi.Candidates) != 0 {
 		t.Error("选完以后不应再挂候选")
 	}
+	if gi.InstallDirSupported {
+		t.Error("选安装包后不应宣称支持安装目录（当前版本不支持组合）")
+	}
 }
 
 // 配方歧义：select{recipe} 指定其中一个配方（A2 补的参数）。
@@ -241,6 +246,9 @@ func TestDecisionSelectRecipe(t *testing.T) {
 	if gi.Decision != ActionSelect {
 		t.Errorf("决策徽章缺失: %q", gi.Decision)
 	}
+	if gi.InstallDirSupported {
+		t.Error("选配方后不应宣称支持安装目录（当前版本不支持组合）")
+	}
 
 	// 选没有安装包的配方 → manual，但不再是歧义
 	got = mustBuildDec(t, testOptions(cfg, target, files, recipes), Decisions{{
@@ -249,6 +257,398 @@ func TestDecisionSelectRecipe(t *testing.T) {
 	}})
 	if got.Items[0].Status != StatusManual {
 		t.Errorf("无安装包的配方应转 manual，实际 %q", got.Items[0].Status)
+	}
+}
+
+// set_location：本地包按配方模板追加目录参数，默认命令保持不变。
+func TestSetLocationLocalRewritesCommand(t *testing.T) {
+	cfg := baseConfig()
+	cfg.Software = []config.Software{software("App", "1.0", "")}
+	r := recipe("app", "Setup-*.exe", "/S")
+	r.Aliases = []string{"app"}
+	r.InstallDirArg = `/DIR="{install_dir}"`
+	target := okTarget()
+	target.WingetOK = false
+	o := testOptions(cfg, target, []string{"Setup-1.exe"}, []config.Installer{r})
+
+	base := mustBuild(t, o)
+	it := base.Items[0]
+	if it.Tier != TierLocal || !it.InstallDirSupported {
+		t.Fatalf("setup 无效: tier=%q supported=%v", it.Tier, it.InstallDirSupported)
+	}
+	before := it.Command
+
+	got := mustBuildDec(t, o, Decisions{{TargetID: it.TargetID, Kind: it.Kind,
+		Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}}})
+	gi := got.Items[0]
+	if gi.InstallDir != `D:\Apps\App` || !gi.InstallDirApplied {
+		t.Errorf("安装目录未写入: %+v", gi)
+	}
+	want := before + ` /DIR="D:\Apps\App"`
+	if gi.Command != want {
+		t.Errorf("命令 = %q\n期望 = %q", gi.Command, want)
+	}
+	if got.Items[0].TargetID != it.TargetID {
+		t.Error("target_id 不应因安装目录变化")
+	}
+}
+
+func TestSetLocationUsesRelocationLedger(t *testing.T) {
+	cfg := baseConfig()
+	cfg.Software = []config.Software{software("App", "1.0", "")}
+	r := recipe("app", "Setup-*.exe", "/S")
+	r.Aliases = []string{"app"}
+	r.InstallDirArg = `/DIR="{install_dir}"`
+	target := okTarget()
+	target.WingetOK = false
+	o := testOptions(cfg, target, []string{"Setup-1.exe"}, []config.Installer{r})
+	base := mustBuild(t, o)
+	id := base.Items[0].TargetID
+
+	ledger := relocation.New()
+	ledger.Upsert(relocation.Entry{
+		TargetID: id, InstallDir: `D:\Apps\App`, ActualDir: `D:\Apps\App`, Verified: true,
+	})
+	o.Relocations = ledger
+	got := mustBuildDec(t, o, Decisions{{TargetID: id, Kind: DecKindSoftware,
+		Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}}})
+	if got.Items[0].Reinstall || !got.Items[0].InstallDirApplied || !got.Items[0].InstallDirVerified {
+		t.Errorf("账本命中应不重装并保留已验证状态: %+v", got.Items[0])
+	}
+	if got.Items[0].InstallDirActual != `D:\Apps\App` {
+		t.Errorf("账本命中应带出实际目录: %+v", got.Items[0])
+	}
+
+	o.Relocations = relocation.New()
+	o.Relocations.Upsert(relocation.Entry{TargetID: id, InstallDir: `D:\Other`, Verified: true})
+	got = mustBuildDec(t, o, Decisions{{TargetID: id, Kind: DecKindSoftware,
+		Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}}})
+	if !got.Items[0].Reinstall {
+		t.Error("目录变化应重新重装")
+	}
+
+	o.Relocations = relocation.New()
+	o.Relocations.Upsert(relocation.Entry{TargetID: id, InstallDir: `D:\Apps\App`, Verified: false})
+	got = mustBuildDec(t, o, Decisions{{TargetID: id, Kind: DecKindSoftware,
+		Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}}})
+	if got.Items[0].Reinstall || got.Items[0].InstallDirVerified {
+		t.Errorf("账本未验证应不重装但标 unverified: %+v", got.Items[0])
+	}
+
+	o.Relocations = relocation.New()
+	got = mustBuildDec(t, o, Decisions{{TargetID: id, Kind: DecKindSoftware,
+		Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}}})
+	if !got.Items[0].Reinstall {
+		t.Error("空账本应重新重装")
+	}
+}
+
+// set_location：winget 包按配方模板追加 --location，并同步重算本地降级命令。
+func TestSetLocationWingetRewritesCommandAndFallback(t *testing.T) {
+	cfg := baseConfig()
+	cfg.Software = []config.Software{software("App", "1.0", "Vendor.App")}
+	r := recipe("app", "Setup-*.exe", "/S")
+	r.Aliases = []string{"app"}
+	r.WingetIDs = []string{"Vendor.App"}
+	r.WingetLocationArg = `--location "{install_dir}"`
+	r.InstallDirArg = `/DIR="{install_dir}"`
+	o := testOptions(cfg, okTarget(), []string{"Setup-1.exe"}, []config.Installer{r})
+
+	base := mustBuild(t, o)
+	it := base.Items[0]
+	if it.Tier != TierWinget || it.FallbackPlan == nil {
+		t.Fatalf("setup 无效: tier=%q fallback=%v", it.Tier, it.FallbackPlan)
+	}
+	wantWinget := it.Command + ` --location "D:\Apps\App" --force`
+	wantLocal := it.FallbackPlan.Command + ` /DIR="D:\Apps\App"`
+
+	got := mustBuildDec(t, o, Decisions{{TargetID: it.TargetID, Kind: it.Kind,
+		Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}}})
+	gi := got.Items[0]
+	if gi.Command != wantWinget {
+		t.Errorf("winget 命令 = %q\n期望 = %q", gi.Command, wantWinget)
+	}
+	if gi.FallbackPlan == nil || gi.FallbackPlan.Command != wantLocal {
+		t.Errorf("降级命令未同步: %+v", gi.FallbackPlan)
+	}
+	if gi.FallbackPlan.InstallDir != `D:\Apps\App` {
+		t.Errorf("降级方案应记录安装目录: %+v", gi.FallbackPlan)
+	}
+}
+
+// winget 失败后若本地配方没有目录参数，必须禁用降级，避免静默装到默认目录。
+func TestSetLocationWingetDisablesFallbackWithoutLocalDir(t *testing.T) {
+	cfg := baseConfig()
+	cfg.Software = []config.Software{software("Node", "22.0.0", "OpenJS.NodeJS")}
+	r := recipe("node", "node-*.msi", "/qn")
+	r.Aliases = []string{"node"}
+	r.WingetIDs = []string{"OpenJS.NodeJS"}
+	r.WingetLocationArg = `--location "{install_dir}"`
+	// 故意提供可匹配的本地包，但没有 InstallDirArg。
+	o := testOptions(cfg, okTarget(), []string{"node-22.msi"}, []config.Installer{r})
+	base := mustBuild(t, o)
+	if base.Items[0].FallbackPlan == nil {
+		t.Fatal("前置条件：winget 条目应有本地降级方案")
+	}
+
+	got := mustBuildDec(t, o, Decisions{{TargetID: base.Items[0].TargetID, Kind: DecKindSoftware,
+		Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps\Node`)}}})
+	it := got.Items[0]
+	if it.FallbackPlan != nil {
+		t.Errorf("本地降级无法应用目录时不应保留可执行 FallbackPlan: %+v", it.FallbackPlan)
+	}
+	if !strings.Contains(it.Fallback, "不可降级到本地包") {
+		t.Errorf("Fallback 文案应说明禁用原因: %q", it.Fallback)
+	}
+}
+
+func TestSetLocationWingetWithoutForceBlocksPlan(t *testing.T) {
+	cfg := baseConfig()
+	cfg.Software = []config.Software{software("App", "1.0", "Vendor.App")}
+	r := recipe("app", "Setup-*.exe", "/S")
+	r.Aliases = []string{"app"}
+	r.WingetIDs = []string{"Vendor.App"}
+	r.WingetLocationArg = `--location "{install_dir}"`
+	target := okTarget()
+	target.WingetForceOK = false
+	o := testOptions(cfg, target, nil, []config.Installer{r})
+	p := mustBuild(t, o)
+
+	got, err := Build(Options{
+		Config: o.Config, Target: o.Target, InstallerDir: o.InstallerDir,
+		InstallerFiles: o.InstallerFiles, Recipes: o.Recipes, Now: o.Now,
+		Exists: o.Exists, Expand: o.Expand, ExpandVars: o.ExpandVars,
+		Decisions: Decisions{{TargetID: p.Items[0].TargetID, Kind: DecKindSoftware,
+			Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}}},
+	})
+	if err != nil {
+		t.Fatalf("Build 不应返回错误，应标计划 blocked: %v", err)
+	}
+	if !got.IsBlocked() || !strings.Contains(got.Blocked, "winget 不支持强制重装") {
+		t.Errorf("计划应 blocked 且原因可读: blocked=%q", got.Blocked)
+	}
+	if got.Items[0].Status != StatusBlockedNeedsDecision {
+		t.Errorf("条目应标 blocked，实际 %q", got.Items[0].Status)
+	}
+}
+
+// 第一版保持全局 blocked：一个 winget 项缺 --force 会阻止整批，
+// 其它条目本身不改状态。改成 item-level 需要单独评审，不在本版扩散。
+func TestWingetForceBlockStaysGlobal(t *testing.T) {
+	cfg := baseConfig()
+	cfg.Software = []config.Software{
+		software("App", "1.0", "Vendor.App"),
+		software("Other", "2.0", "Vendor.Other"),
+	}
+	r := recipe("app", "Setup-*.exe", "/S")
+	r.Aliases = []string{"app"}
+	r.WingetIDs = []string{"Vendor.App"}
+	r.WingetLocationArg = `--location "{install_dir}"`
+	target := okTarget()
+	target.WingetForceOK = false
+	o := testOptions(cfg, target, nil, []config.Installer{r})
+	base := mustBuild(t, o)
+	appID := ""
+	for _, it := range base.Items {
+		if it.Name == "App" {
+			appID = it.TargetID
+		}
+	}
+	if appID == "" {
+		t.Fatal("找不到 App 条目")
+	}
+
+	got, err := Build(Options{
+		Config: o.Config, Target: o.Target, InstallerDir: o.InstallerDir,
+		InstallerFiles: o.InstallerFiles, Recipes: o.Recipes, Now: o.Now,
+		Exists: o.Exists, Expand: o.Expand, ExpandVars: o.ExpandVars,
+		Decisions: Decisions{{TargetID: appID, Kind: DecKindSoftware,
+			Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}}},
+	})
+	if err != nil {
+		t.Fatalf("Build 不应返回错误: %v", err)
+	}
+	if !got.IsBlocked() || !strings.Contains(got.Blocked, "winget 不支持强制重装") {
+		t.Fatalf("缺 --force 应阻止整个计划: %q", got.Blocked)
+	}
+	for _, it := range got.Items {
+		if it.Name == "Other" && it.Status != StatusPlanned {
+			t.Errorf("其它条目本身不应被改写: %+v", it)
+		}
+	}
+}
+
+func TestSetLocationRejectsUnverifiedBuiltinDirArgs(t *testing.T) {
+	cases := []struct {
+		name     string
+		wingetID string
+		file     string
+	}{
+		{name: "Git", wingetID: "Git.Git", file: "Git-2.56.0-64-bit.exe"},
+		{name: "Notepad++", wingetID: "Notepad++.Notepad++", file: "npp.8.8.1.Installer.exe"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			cfg := baseConfig()
+			cfg.Software = []config.Software{software(c.name, "1.0", c.wingetID)}
+			target := okTarget()
+			target.WingetOK = false
+			p := mustBuild(t, testOptions(cfg, target, []string{c.file}, recipes.Builtin()))
+			if len(p.Items) != 1 || p.Items[0].Tier != TierLocal {
+				t.Fatalf("应命中本地配方: %+v", p.Items)
+			}
+			if p.Items[0].InstallDirSupported {
+				t.Errorf("未验证的本地目录参数不应标记 supported")
+			}
+			issues := decisionsIssues(t, p, Decisions{{
+				TargetID: p.Items[0].TargetID, Kind: DecKindSoftware,
+				Action: ActionSetLocation,
+				Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)},
+			}})
+			if len(issues) != 1 || !strings.Contains(issues[0].Reason, "未声明安装目录参数") {
+				t.Fatalf("应拒绝未验证的本地目录: %+v", issues)
+			}
+		})
+	}
+}
+
+// 配方未声明对应参数时拒绝，不能静默忽略。
+func TestSetLocationRejectsUnsupportedRecipe(t *testing.T) {
+	cfg := baseConfig()
+	cfg.Software = []config.Software{software("App", "1.0", "Vendor.App")}
+	r := recipe("app", "Setup-*.exe", "/S")
+	r.Aliases = []string{"app"}
+	r.WingetIDs = []string{"Vendor.App"}
+	o := testOptions(cfg, okTarget(), []string{"Setup-1.exe"}, []config.Installer{r})
+	p := mustBuild(t, o)
+
+	issues := decisionsIssues(t, p, Decisions{{TargetID: p.Items[0].TargetID, Kind: DecKindSoftware,
+		Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}}})
+	if len(issues) != 1 || !strings.Contains(issues[0].Reason, "未声明安装目录参数") {
+		t.Fatalf("应拒绝未声明参数的配方: %+v", issues)
+	}
+
+	// 只声明本地参数时，winget 层级仍应拒绝。
+	r.WingetLocationArg = ""
+	r.InstallDirArg = `/DIR="{install_dir}"`
+	p = mustBuild(t, testOptions(cfg, okTarget(), []string{"Setup-1.exe"}, []config.Installer{r}))
+	if p.Items[0].InstallDirSupported {
+		t.Error("winget 条目只声明本地参数时不应标记 supported")
+	}
+	issues = decisionsIssues(t, p, Decisions{{TargetID: p.Items[0].TargetID, Kind: DecKindSoftware,
+		Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}}})
+	if len(issues) != 1 || !strings.Contains(issues[0].Reason, "未声明 winget 安装目录参数") {
+		t.Fatalf("winget 缺参数应拒绝: %+v", issues)
+	}
+}
+
+// resolver 缺失时必须在校验阶段拒绝，不能留下“字段已应用但命令没重算”的静默路径。
+func TestSetLocationRejectsMissingResolver(t *testing.T) {
+	cfg := baseConfig()
+	cfg.Software = []config.Software{software("App", "1.0", "")}
+	r := recipe("app", "Setup-*.exe", "/S")
+	r.Aliases = []string{"app"}
+	r.InstallDirArg = `/DIR="{install_dir}"`
+	target := okTarget()
+	target.WingetOK = false
+	p := mustBuild(t, testOptions(cfg, target, []string{"Setup-1.exe"}, []config.Installer{r}))
+	delete(p.locationResolvers, p.Items[0].TargetID)
+
+	issues := decisionsIssues(t, p, Decisions{{TargetID: p.Items[0].TargetID, Kind: DecKindSoftware,
+		Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}}})
+	if len(issues) != 1 || !strings.Contains(issues[0].Reason, "缺少命令重算信息") {
+		t.Fatalf("resolver 缺失应拒绝: %+v", issues)
+	}
+}
+
+// 第一版明确拒绝 select{installer} 与 set_location 的组合，并给出可读原因。
+func TestSetLocationRejectsInstallerSelectCombination(t *testing.T) {
+	cfg := baseConfig()
+	cfg.Software = []config.Software{software("App", "1.0", "")}
+	r := recipe("app", "Setup-*.exe", "/S")
+	r.Aliases = []string{"app"}
+	r.InstallDirArg = `/DIR="{install_dir}"`
+	target := okTarget()
+	target.WingetOK = false
+	p := mustBuild(t, testOptions(cfg, target, []string{"Setup-1.exe", "Setup-2.exe"}, []config.Installer{r}))
+	id := p.Items[0].TargetID
+
+	issues := decisionsIssues(t, p, Decisions{
+		{TargetID: id, Kind: DecKindSoftware, Action: ActionSelect,
+			Params: &DecisionParams{Installer: ptr("Setup-1.exe")}},
+		{TargetID: id, Kind: DecKindSoftware, Action: ActionSetLocation,
+			Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}},
+	})
+	if len(issues) != 1 || !strings.Contains(issues[0].Reason, "不支持 select{installer} 与 set_location 组合") {
+		t.Fatalf("组合决策应明确拒绝: %+v", issues)
+	}
+}
+
+// 路径校验与 path.rewrite 共用：非绝对路径、盘符不存在都要拒绝。
+func TestSetLocationValidatesPath(t *testing.T) {
+	cfg := baseConfig()
+	cfg.Software = []config.Software{software("App", "1.0", "")}
+	r := recipe("app", "Setup-*.exe", "/S")
+	r.Aliases = []string{"app"}
+	r.InstallDirArg = `/DIR="{install_dir}"`
+	target := okTarget()
+	target.WingetOK = false
+	p := mustBuild(t, testOptions(cfg, target, []string{"Setup-1.exe"}, []config.Installer{r}))
+	id := p.Items[0].TargetID
+
+	cases := []struct{ dir, want string }{
+		{`Apps\Git`, "必须是盘符开头的绝对路径"},
+		{`Z:\Apps\Git`, "没有盘符 Z:"},
+		{``, "不能为空"},
+	}
+	for _, c := range cases {
+		issues := decisionsIssues(t, p, Decisions{{TargetID: id, Kind: DecKindSoftware,
+			Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(c.dir)}}})
+		if len(issues) != 1 || !strings.Contains(issues[0].Reason, c.want) {
+			t.Errorf("dir=%q: issues = %+v，期望含 %q", c.dir, issues, c.want)
+		}
+	}
+}
+
+// params 必须且只能有 install_dir。
+func TestSetLocationRejectsExtraParams(t *testing.T) {
+	cfg := baseConfig()
+	cfg.Software = []config.Software{software("App", "1.0", "")}
+	r := recipe("app", "Setup-*.exe", "/S")
+	r.Aliases = []string{"app"}
+	r.InstallDirArg = `/DIR="{install_dir}"`
+	target := okTarget()
+	target.WingetOK = false
+	p := mustBuild(t, testOptions(cfg, target, []string{"Setup-1.exe"}, []config.Installer{r}))
+	id := p.Items[0].TargetID
+
+	issues := decisionsIssues(t, p, Decisions{{TargetID: id, Kind: DecKindSoftware,
+		Action: ActionSetLocation, Params: &DecisionParams{InstallDir: ptr(`D:\Apps`), Version: ptr("1.0")}}})
+	if len(issues) != 1 || !strings.Contains(issues[0].Reason, "只接受 params.install_dir") {
+		t.Errorf("额外参数应拒绝: %+v", issues)
+	}
+}
+
+// 选择安装包后仍可指定目录，且目录不改变 target_id。
+func TestSetLocationAfterSelectInstaller(t *testing.T) {
+	cfg := baseConfig()
+	cfg.Software = []config.Software{software("App", "1.0", "")}
+	r := recipe("app", "Setup-*.exe", "/S")
+	r.Aliases = []string{"app"}
+	r.InstallDirArg = `/DIR="{install_dir}"`
+	target := okTarget()
+	target.WingetOK = false
+	o := testOptions(cfg, target, []string{"Setup-1.exe"}, []config.Installer{r})
+	p := mustBuild(t, o)
+	id := p.Items[0].TargetID
+
+	got := mustBuildDec(t, o, Decisions{{TargetID: id, Kind: DecKindSoftware, Action: ActionSetLocation,
+		Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)}}})
+	if got.Items[0].Command != `"C:\proj\installers\Setup-1.exe" /S /DIR="D:\Apps\App"` {
+		t.Errorf("命令 = %q", got.Items[0].Command)
+	}
+	if got.Items[0].TargetID != id {
+		t.Error("target_id 不应因目录变化")
 	}
 }
 

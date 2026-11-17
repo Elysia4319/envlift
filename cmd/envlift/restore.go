@@ -19,6 +19,8 @@ import (
 	"github.com/Elysia4319/envlift/internal/pathmgmt"
 	"github.com/Elysia4319/envlift/internal/plan"
 	"github.com/Elysia4319/envlift/internal/probe"
+	"github.com/Elysia4319/envlift/internal/recipes"
+	"github.com/Elysia4319/envlift/internal/relocation"
 	"github.com/Elysia4319/envlift/internal/report"
 	"github.com/Elysia4319/envlift/internal/scan"
 	"github.com/Elysia4319/envlift/internal/sysinfo"
@@ -44,6 +46,7 @@ func runRestore(args []string) int {
 	rollback := fs.Bool("rollback", false, "把 PATH 回滚到 journal 里的快照")
 	journalPath := fs.String("journal", "", "指定 journal 文件（回滚用，缺省取 reports/ 下最新）")
 	decisionsPath := fs.String("decisions", "", "决策文件（缺省读配置同目录的 envlift.decisions.yaml，存在则加载）")
+	relocationsPath := fs.String("relocations", relocation.DefaultPath, "重装账本路径")
 	if err := fs.Parse(args); err != nil {
 		return exitError
 	}
@@ -120,19 +123,25 @@ func runRestore(args []string) int {
 		fmt.Fprintf(os.Stderr, "决策文件 %s 不存在或为空；--decisions 明确指定时不允许当成「没有决策」。\n", decPath)
 		return exitError
 	}
+	ledger, ledgerErr := relocation.Load(*relocationsPath)
+	if ledgerErr != nil {
+		fmt.Fprintf(os.Stderr, "警告: %v（按空账本继续）\n", ledgerErr)
+		ledger = relocation.New()
+	}
 
 	p, err := plan.Build(plan.Options{
 		Config:         cfg,
 		Target:         target,
 		InstallerDir:   absInstallerDir,
 		InstallerFiles: files,
-		Recipes:        mergeRecipes(cfg),
+		Recipes:        recipes.Merge(cfg),
 		Now:            time.Now(),
 		Exists:         pathExists,
 		Expand:         redactor.ExpandString,
 		ExpandVars:     pathenv.ExpandVars,
 		RawConfig:      rawMode,
 		Decisions:      ds,
+		Relocations:    ledger,
 	})
 	if err != nil {
 		var derr *plan.DecisionErrors
@@ -145,10 +154,13 @@ func runRestore(args []string) int {
 					fmt.Fprintf(os.Stderr, "  - 第 %d 条决策：%s\n", is.Index, is.Reason)
 				}
 			}
-			return exitRefused
+			return planErrorExitCode(err)
 		}
 		fmt.Fprintf(os.Stderr, "生成计划失败: %v\n", err)
-		return exitError
+		return planErrorExitCode(err)
+	}
+	if ledgerErr != nil {
+		p.Warnings = append(p.Warnings, "重装账本读取失败，按空账本继续: "+ledgerErr.Error())
 	}
 
 	renderPlan(os.Stdout, p, *cfgPath, *installerDir)
@@ -175,7 +187,7 @@ func runRestore(args []string) int {
 	}
 
 	if *apply {
-		return doApply(p, env, *cfgPath, *journalDir, *yes, ds, newPrompter(os.Stdin, os.Stdout))
+		return doApply(p, env, *cfgPath, *journalDir, *yes, ds, ledger, *relocationsPath, newPrompter(os.Stdin, os.Stdout))
 	}
 
 	if *writeReport {
@@ -198,16 +210,17 @@ func runRestore(args []string) int {
 
 func buildTarget(env *scan.Environment) plan.Target {
 	t := plan.Target{
-		OS:        env.Info.OSVersion,
-		Build:     env.Info.OSBuild,
-		Arch:      env.Info.Arch,
-		Username:  env.Info.Username,
-		Hostname:  env.Info.Hostname,
-		Elevated:  env.Info.Elevated,
-		WingetOK:  env.Info.WingetAvailable,
-		WingetVer: env.Info.WingetVersion,
-		Runtimes:  make(map[string]plan.RuntimeState, len(env.Runtimes)),
-		PathDirs:  env.PathDirs,
+		OS:            env.Info.OSVersion,
+		Build:         env.Info.OSBuild,
+		Arch:          env.Info.Arch,
+		Username:      env.Info.Username,
+		Hostname:      env.Info.Hostname,
+		Elevated:      env.Info.Elevated,
+		WingetOK:      env.Info.WingetAvailable,
+		WingetVer:     env.Info.WingetVersion,
+		WingetForceOK: env.Info.WingetForceAvailable,
+		Runtimes:      make(map[string]plan.RuntimeState, len(env.Runtimes)),
+		PathDirs:      env.PathDirs,
 	}
 	for _, d := range env.Info.Drives {
 		t.Drives = append(t.Drives, d.Letter)
@@ -261,35 +274,21 @@ func listInstallerFiles(dir string) ([]string, error) {
 	return out, nil
 }
 
-// mergeRecipes 合并内置配方与用户配方：同名时用户条目覆盖内置（D6）。
-// 本轮内置表为空，逻辑先立好，第 ④ 步接入时不用改调用方。
-func mergeRecipes(cfg *config.Config) []config.Installer {
-	builtin := []config.Installer{}
-
-	byName := make(map[string]int, len(builtin)+len(cfg.Installers))
-	out := make([]config.Installer, 0, len(builtin)+len(cfg.Installers))
-	for _, r := range builtin {
-		byName[strings.ToLower(r.Name)] = len(out)
-		out = append(out, r)
-	}
-	for _, r := range cfg.Installers {
-		key := strings.ToLower(r.Name)
-		if i, ok := byName[key]; ok {
-			out[i] = r
-			continue
-		}
-		byName[key] = len(out)
-		out = append(out, r)
-	}
-	return out
-}
-
 func writePlanJSON(path string, p *plan.Plan) error {
 	data, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(path, append(data, '\n'), 0o644)
+}
+
+// planErrorExitCode 把计划构建错误映射成稳定的 CLI 退出码。
+func planErrorExitCode(err error) int {
+	var derr *plan.DecisionErrors
+	if errors.As(err, &derr) {
+		return exitRefused
+	}
+	return exitError
 }
 
 func renderPlan(w io.Writer, p *plan.Plan, cfgPath, installerDir string) {
@@ -468,7 +467,8 @@ func verifyText(cmd, expect string) string {
 }
 
 // doApply 执行计划。C1：独立于 dry-run 的二次确认，--yes 不能绕过它。
-func doApply(p *plan.Plan, env *scan.Environment, cfgPath, journalDir string, yes bool, ds plan.Decisions, pr *prompter) int {
+func doApply(p *plan.Plan, env *scan.Environment, cfgPath, journalDir string, yes bool, ds plan.Decisions,
+	ledger *relocation.Ledger, relocationsPath string, pr *prompter) int {
 	if p.IsBlocked() {
 		fmt.Fprintf(os.Stderr, "计划被阻止，不能执行: %s\n", p.Blocked)
 		return exitRefused
@@ -517,13 +517,16 @@ func doApply(p *plan.Plan, env *scan.Environment, cfgPath, journalDir string, ye
 	fmt.Printf("事务日志: %s\n\n", j.Path())
 
 	res, err := apply.Run(apply.Options{
-		Plan:     p,
-		Journal:  j,
-		Exec:     apply.NewExecutor(),
-		Paths:    pathmgmt.New(),
-		Out:      os.Stdout,
-		Elevated: env.Info.Elevated,
-		Confirm:  pr.confirm,
+		Plan:           p,
+		Journal:        j,
+		Exec:           apply.NewExecutor(),
+		Paths:          pathmgmt.New(),
+		Locations:      apply.NewRegistryLocationReader(),
+		Relocations:    ledger,
+		RelocationPath: relocationsPath,
+		Out:            os.Stdout,
+		Elevated:       env.Info.Elevated,
+		Confirm:        pr.confirm,
 		Preflight: func() (bool, bool, string) {
 			ok, note := probeNetwork(3 * time.Second)
 			return env.Info.WingetAvailable, ok, note

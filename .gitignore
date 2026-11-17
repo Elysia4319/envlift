@@ -63,5 +63,9 @@ scripts/ui-check/shots/
 envlift.decisions.yaml
 envlift.decisions.yaml.tmp
 
+# 安装目录重装账本：本机状态，不入库
+envlift.relocations.yaml
+*.relocations.yaml
+
 # 根目录下的扫描产物（含真实用户名/主机名/本机路径），只忽略仓库根层
 /envlift-*.yaml

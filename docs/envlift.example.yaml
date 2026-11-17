@@ -88,6 +88,10 @@ installers:
     match_display: '(?i)^Example Editor'
     match: 'ExampleEditorSetup-*.exe'
     silent_args: '/VERYSILENT /NORESTART'
+    # 示例：声明后可在 GUI/决策文件里用 set_location 指定安装目录。
+    install_dir_arg: '/DIR="{install_dir}"'
+    winget_location_arg: '--location "{install_dir}"'
+    install_dir_source: 'Inno Setup /DIR 官方参数；winget --location 本机 install --help 实测'
     needs_admin: true
     order: 10
     verify:
