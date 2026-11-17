@@ -59,7 +59,7 @@ go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=0.1.0-alpha" 
 | 2. 同目录第二次 apply | 通过（alpha 6CFCA6） | `status=skipped`、`Reinstall=false`、未执行安装命令；账本命中即跳过 | 不依赖 verify |
 | 3. 改目录第三次 apply | 通过（alpha 6CFCA6） | `/D=C:\My Apps\7zip2`；报告 verified=true；账本 `actual_dir=C:\My Apps\7zip2\` | 同 target_id 账本更新 |
 | 4. expect_reboot | 部分通过（operator-reported） | 第一次停在“完成后需要重启”，exit 2 并写账本；重启后第二次账本命中跳过并标 unverified | 缺 `LastBootUpTime` 工件，未独立确认 |
-| 5. winget 包 | 部分通过（alpha 6CFCA6，版本漂移 unverified） | 第一次 apply 完成；第二次账本命中跳过 | 6CFCA6 注册表落点未补证；两次报告均 unverified |
+| 5. winget 包 | 未完成（E87E 源超时；6CFCA6 历史） | 6CFCA6 第一次 apply 完成；E87E 复跑失败 | 最终二进制未完成；注册点未补证 |
 | 6. 降级目录丢失 | 历史通过（alpha 455C，未用 6CFCA6 复跑） | `fallback_plan=null`；无 `[降级]`；标记文件 `MARKER=NO` | 不阻塞本轮 1–5 |
 | 7. 账本与实际不符 | 历史通过（旧二进制，非最终） | 篡改注册表后打印“账本记录与实际不符，重新安装”并执行安装；账本 `actual_dir` 更新 | 未用 alpha 复跑 |
 | 8. InstallLocation 读取失败 | 历史通过（旧二进制，非最终） | 拒绝读取假卸载键后未按账本跳过，执行安装并标 `unverified` | 读取错误被折叠为“未找到” |
@@ -69,8 +69,8 @@ go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=0.1.0-alpha" 
 | 12. 回滚限制 | 部分通过（旧二进制，非最终） | 安装目录-only journal 无 PATH 快照，rollback 报错；7-Zip 仍安装 | PATH 回滚沿用 2026-11-03 F7 结果，本轮未重跑 |
 | 13. 重装失败报告 | 历史通过（alpha 455C，未用 6CFCA6 复跑） | `fail-setup.exe` 退出 1；报告 `status=failed`、`failure_reason=simulated installer failure: exit 1`；无账本 | 未出现 `succeeded` |
 
-最终 alpha 6CFCA6 明确通过项为场景 1–3；场景 4/5 部分通过；场景 6/13 为 alpha 455C 历史结果；
-场景 7–10 为旧二进制历史结果；场景 11 未验证；场景 12 部分通过。
+最终 alpha E87E 明确通过项为场景 1–3；场景 4 部分通过（operator-reported）；场景 5 未完成；
+场景 6/13 为 alpha 455C 历史结果；场景 7–10 为旧二进制历史结果；场景 11 未验证；场景 12 部分通过。
 
 ## P1 修复复验（alpha 6CFCA6）
 
@@ -145,6 +145,8 @@ builtin `notepadplusplus` 没有 `Verify`，安装包 `npp.8.8.1.Installer.exe`�
 - 未补 `LastBootUpTime`：场景 4/F6 的重启只有 operator-reported，未由仓库工件独立确认；
   checklist 第 121 行和 F6 保持未勾选/部分通过。
 - 场景 6/13 未用 6CFCA6 复跑，继续标 alpha 455C 历史。
+- E87E 的 winget 复跑第一次 apply 被源超时打断（退出码 `2147954429`），场景 5 未完成；
+  不得把 6CFCA6 历史结果写成 E87E 通过。
 
 ### P2-3 读取错误
 
@@ -409,6 +411,8 @@ reinstall      = true
 - `p1-winget-apply1.txt` / `p1-winget-apply2.txt` / `p1-winget-ledger.yaml`：场景 5（alpha 6CFCA6）
 - `p1-npp-first.json` / `p1-npp-second.json` / `p1-npp-check.txt`：NPP builtin 无 verify 复跑
 - `p2-deny-git-npp.txt`：Git/Notepad++ 本地目录决策被拒绝的 dry-run 输出
+- `p2-7zip-e87-apply1.txt` / `p2-7zip-e87-apply2.txt`：E87E 7zip 本地含空格目录两次 apply
+- `p2-winget-e87-apply1.txt`：E87E winget 首次 apply 源超时记录
 - `alpha-7zip-first.json` / `alpha-7zip-second.json` / `alpha-7zip-dir2.json` / `alpha-noop-first.json` / `alpha-noop-second.json`：alpha 455C 历史结果
 - `alpha-winget-dryrun.txt` / `alpha-winget-apply.json` / `alpha-winget-apply.md` / `alpha-winget-check.txt` / `alpha-winget-ledger.yaml` / `alpha-winget-source-update.txt`：场景 5 alpha 455C 历史结果
 - `alpha-winget-apply-failure.txt` / `alpha-winget-net.txt`：场景 5 早期网络失败记录（历史）

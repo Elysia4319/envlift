@@ -106,7 +106,7 @@
 ## 11. 安装目录与重装
 
 - [x] 本地 Inno/NSIS 包指定新目录，安装后注册表 `InstallLocation` 与目标目录一致。
-- [x] winget 包指定新目录，确认该包的 `--location` 是否被接受。（场景 5 alpha 6CFCA6：第一次 apply 完成，第二次账本命中跳过；报告 unverified；6CFCA6 注册表落点未补证）
+- [ ] winget 包指定新目录，确认该包的 `--location` 是否被接受。（6CFCA6 历史 apply 完成；E87E 复跑被 winget 源超时打断，最终二进制未完成）
 - [ ] winget 失败后本地降级：如果本地配方没有 `install_dir_arg`，确认不会静默装到默认目录。（alpha 455C 历史通过，未用 6CFCA6 复跑）
 - [x] 已安装软件设置新目录，确认进入重装而不是 `skipped`。
 - [x] 重装失败时报告能看出失败原因，不显示 `succeeded`。
@@ -131,7 +131,7 @@
 | 2. 同目录第二次 apply | 通过（alpha 6CFCA6） | 账本命中跳过，未执行安装命令 | 不依赖 verify |
 | 3. 改目录第三次 apply | 通过（alpha 6CFCA6） | `/D=C:\My Apps\7zip2`；账本 actual_dir 更新 | 同 target_id |
 | 4. expect_reboot | 部分通过（operator-reported） | 第一次停在重启并写账本；重启后第二次账本命中跳过并标 unverified | 缺 `LastBootUpTime` 工件，未独立确认 |
-| 5. winget 包 | 部分通过（alpha 6CFCA6，版本漂移 unverified） | 第一次 apply 完成，第二次账本命中跳过 | 6CFCA6 注册表落点未补证 |
+| 5. winget 包 | 未完成（E87E 源超时；6CFCA6 历史） | 6CFCA6 第一次 apply 完成；E87E 复跑失败 | 最终二进制未完成，注册点未补证 |
 | 6. 降级目录丢失 | 历史通过（alpha 455C，未用 6CFCA6 复跑） | `fallback_plan=null`、无 `[降级]`、标记文件不存在 | 不阻塞 1–5 |
 | 7. 账本与实际不符 | 历史通过（旧二进制，非最终） | 打印“账本记录与实际不符，重新安装”并真正重装 | actual_dir 更新 |
 | 8. InstallLocation 读取失败 | 历史通过（旧二进制，非最终） | 拒绝读取后未跳过、执行安装并标 unverified | 读取错误被折叠为“未找到” |
@@ -141,12 +141,13 @@
 | 12. 回滚限制 | 部分通过（旧二进制，非最终） | 安装目录-only journal 无 PATH 快照；7-Zip 仍安装 | PATH 回滚沿用 2026-11-03 F7 |
 | 13. 重装失败报告 | 历史通过（alpha 455C，未用 6CFCA6 复跑） | `fail-setup.exe` 退出 1；报告 `status=failed`、failure_reason 可读；无账本 | 未出现 succeeded |
 
-> 场景 1–3 为 alpha 6CFCA6 最终通过；场景 4/5 部分通过；场景 6/13 为 alpha 455C 历史；
+> 场景 1–3 为 E87E 最终通过；场景 4 部分通过（operator-reported）；场景 5 未完成；
+> 场景 6/13 为 alpha 455C 历史；
 > 场景 7–10 为旧二进制历史；
 > 场景 11 未验证；场景 12 部分通过。完整证据见
 > `docs/evidence/install-dir-20261115.md` 与 `docs/evidence/install-dir-20261115/`。
-> P2 最终二进制 `E87EBB...` 用于 Git/NPP 拒绝、GUI 与读取错误验证；7zip/winget apply 路径未变，
-> 场景 1–5 的 VM 结果来自 P1 alpha `6CFCA6...`。
+> P2 最终二进制 `E87EBB...`：7zip 本地含空格目录两次 apply 通过；Git/NPP 本地目录被拒绝；
+> winget 首次 apply 被源超时打断，场景 5 只能用 `6CFCA6...` 历史结果，不能写成 E87E 通过。
 > 第 124 行保持未勾选：安装目录变更不提供自动卸载回滚；PATH 回滚本轮未重跑，
 > 沿用 2026-11-03 F7 结果。
 
