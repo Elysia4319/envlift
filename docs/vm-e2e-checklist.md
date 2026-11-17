@@ -127,9 +127,9 @@
 
 | 场景 | 结果 | 关键证据 | 备注 |
 |---|---|---|---|
-| 1. 本地包首次 apply | 通过（alpha 6CFCA6） | builtin 7zip，无 verify，含空格目录：`/S /D=C:\My Apps\7zip`；报告 verified=true | `verify_command_present=false` |
-| 2. 同目录第二次 apply | 通过（alpha 6CFCA6） | 账本命中跳过，未执行安装命令 | 不依赖 verify |
-| 3. 改目录第三次 apply | 通过（alpha 6CFCA6） | `/D=C:\My Apps\7zip2`；账本 actual_dir 更新 | 同 target_id |
+| 1. 本地包首次 apply | 通过（alpha E87E） | builtin 7zip，无 verify，含空格目录：`/S /D=C:\My Apps\7zip`；报告 verified=true | `verify_command_present=false` |
+| 2. 同目录第二次 apply | 通过（alpha E87E） | 账本命中跳过，未执行安装命令 | 不依赖 verify |
+| 3. 改目录第三次 apply | 历史通过（alpha 6CFCA6） | `/D=C:\My Apps\7zip2`；账本 actual_dir 更新 | 未用 E87E 复跑 |
 | 4. expect_reboot | 部分通过（operator-reported） | 第一次停在重启并写账本；重启后第二次账本命中跳过并标 unverified | 缺 `LastBootUpTime` 工件，未独立确认 |
 | 5. winget 包 | 未完成（E87E 源超时；6CFCA6 历史） | 6CFCA6 第一次 apply 完成；E87E 复跑失败 | 最终二进制未完成，注册点未补证 |
 | 6. 降级目录丢失 | 历史通过（alpha 455C，未用 6CFCA6 复跑） | `fallback_plan=null`、无 `[降级]`、标记文件不存在 | 不阻塞 1–5 |
@@ -141,13 +141,14 @@
 | 12. 回滚限制 | 部分通过（旧二进制，非最终） | 安装目录-only journal 无 PATH 快照；7-Zip 仍安装 | PATH 回滚沿用 2026-11-03 F7 |
 | 13. 重装失败报告 | 历史通过（alpha 455C，未用 6CFCA6 复跑） | `fail-setup.exe` 退出 1；报告 `status=failed`、failure_reason 可读；无账本 | 未出现 succeeded |
 
-> 场景 1–3 为 E87E 最终通过；场景 4 部分通过（operator-reported）；场景 5 未完成；
+> 场景 1–2 为 E87E 最终通过；场景 3 为 6CFCA6 历史；场景 4 部分通过（operator-reported）；场景 5 未完成；
 > 场景 6/13 为 alpha 455C 历史；
 > 场景 7–10 为旧二进制历史；
 > 场景 11 未验证；场景 12 部分通过。完整证据见
 > `docs/evidence/install-dir-20261115.md` 与 `docs/evidence/install-dir-20261115/`。
-> P2 最终二进制 `E87EBB...`：7zip 本地含空格目录两次 apply 通过；Git/NPP 本地目录被拒绝；
-> winget 首次 apply 被源超时打断，场景 5 只能用 `6CFCA6...` 历史结果，不能写成 E87E 通过。
+> P2 最终二进制 `E1602A...`：只增加 CLI 退出码映射/测试，apply 行为与 `E87EBB...` 相同；
+> 7zip 本地含空格目录两次 apply 通过，Git/NPP 本地目录被拒绝；winget 首次 apply 被源超时打断，
+> 场景 5 只能用 `6CFCA6...` 历史结果，不能写成最终二进制通过。
 > 第 124 行保持未勾选：安装目录变更不提供自动卸载回滚；PATH 回滚本轮未重跑，
 > 沿用 2026-11-03 F7 结果。
 

@@ -93,7 +93,7 @@ go install github.com/Elysia4319/envlift/cmd/envlift@latest
 - F6 的历史记录曾未执行真实重启；2026-11-15 alpha 场景 4 为 operator-reported，未由仓库工件独立确认（缺 `LastBootUpTime` 证据）。
 - F8「缺 winget」是模拟场景，未真实卸载 App Installer。
 - 不要同时开两个实例；MVP 未做单实例检测。
-- 安装目录仅对配方显式声明参数的包生效；内置 7zip 本地目录参数已在 VM 验证。Git 与 Notepad++ 的本地目录参数在 VM 中未生效，不能宣称支持；VS Code / Python 未复验。Node / Go / PowerShell 目前仅支持 winget 目录参数。
+- 安装目录仅对配方显式声明参数的包生效；内置 7zip 本地目录参数已在 VM 验证。Git 与 Notepad++ 的 `install_dir_arg` 与 `winget_location_arg` 均暂不开放；VS Code / Python 未复验。Node / Go / PowerShell 目前仅支持 winget 目录参数。
 - Git 的 `/DIR` 后续需用官方 `/LOADINF` 方案验证；Notepad++ 的 `/D` 也需要重新确认安装包支持情况。
 - winget 的 `--location` 是包级 best-effort，是否真正生效取决于具体包，必须 VM 验证。
 - winget 失败后若本地配方没有 `install_dir_arg`，不会保留可执行降级方案，避免静默装到默认目录。

@@ -8,19 +8,19 @@
 - winget：`v1.11.510`；`winget install --help` 含 `--force`
 - 权限：普通会话 `ADMIN=False`；最高权限交互式计划任务 `ADMIN=True`、Session 1
 - 最终验收二进制：`envlift 0.1.0-alpha (schema v1)`
-- 验收代码提交：`2999cd3`（P2 修复）
-- 二进制 SHA256：`E87EBBB75D2E3E53B3FDCCEA8806D47EABB85C3BBA1AA251F9C149FCD17AB3CC`
+- 验收代码提交：`d1a444f`（P2 + CLI 退出码测试）
+- 二进制 SHA256：`E1602ADCFC31E6C0E97C3EA99714AA3547FEA3CA1A41D2B94DB7532D898BCF59`
 
 ## 最终验收二进制
 
-从 P2 修复提交 `2999cd3` 重新构建：
+从 P2 修复提交 `d1a444f` 重新构建：
 
 ```text
 go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=0.1.0-alpha" -o tmp\envlift-accept.exe ./cmd/envlift
 ```
 
 - 版本：`envlift 0.1.0-alpha (schema v1)`
-- SHA256：`E87EBBB75D2E3E53B3FDCCEA8806D47EABB85C3BBA1AA251F9C149FCD17AB3CC`
+- SHA256：`E1602ADCFC31E6C0E97C3EA99714AA3547FEA3CA1A41D2B94DB7532D898BCF59`
 - `go version -m` 显示 `-buildvcs=false`，模块版本 `(devel)`，无 `vcs.modified`。
 
 历史二进制（**非最终验收二进制**）：
@@ -28,8 +28,9 @@ go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=0.1.0-alpha" 
 - `a416826` + dirty：SHA `3A5DDD63...`，`vcs.modified=true`。
 - `61b9ffd` + `-buildvcs=false`、无版本注入：SHA `3A020C19...`，版本 `0.1.0-dev`。
 - `ec4e7e9` 的旧 alpha：SHA `455C7A...`，已被 P1 修复替代。
-- `2848e01` 的 P1 alpha：SHA `6CFCA6...`；7zip/winget 的 apply 结果来自该二进制，
-  P2 代码未改这两条路径。P2 最终二进制 `E87EBB...` 用于 Git/NPP 拒绝与 GUI/读取错误验证。
+- `2848e01` 的 P1 alpha：SHA `6CFCA6...`；7zip/winget 的 apply 结果来自该二进制。
+- `2999cd3` 的 P2 alpha：SHA `E87EBB...`；7zip 本地两次 apply 与 Git/NPP 拒绝来自该二进制。
+- `d1a444f` 的最终二进制：SHA `E1602A...`，只增加 CLI 退出码映射/测试，apply 行为不变。
 - 旧结果仅作历史参考，不能作为最终 alpha 验收结论。
 
 ## 环境限制
@@ -55,9 +56,9 @@ go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=0.1.0-alpha" 
 
 | 场景 | 结果 | 关键证据 | 备注 |
 |---|---|---|---|
-| 1. 本地包首次 apply | 通过（alpha 6CFCA6） | builtin 7zip，无 verify，含空格目录：`/S /D=C:\My Apps\7zip`；报告 `install_dir_verified=true`、`actual_dir=C:\My Apps\7zip\` | `verify_command_present=false` |
-| 2. 同目录第二次 apply | 通过（alpha 6CFCA6） | `status=skipped`、`Reinstall=false`、未执行安装命令；账本命中即跳过 | 不依赖 verify |
-| 3. 改目录第三次 apply | 通过（alpha 6CFCA6） | `/D=C:\My Apps\7zip2`；报告 verified=true；账本 `actual_dir=C:\My Apps\7zip2\` | 同 target_id 账本更新 |
+| 1. 本地包首次 apply | 通过（alpha E87E） | builtin 7zip，无 verify，含空格目录：`/S /D=C:\My Apps\7zip`；报告 `install_dir_verified=true`、`actual_dir=C:\My Apps\7zip\` | `verify_command_present=false` |
+| 2. 同目录第二次 apply | 通过（alpha E87E） | `status=skipped`、`Reinstall=false`、未执行安装命令；账本命中即跳过 | 不依赖 verify |
+| 3. 改目录第三次 apply | 历史通过（alpha 6CFCA6） | `/D=C:\My Apps\7zip2`；报告 verified=true；账本 `actual_dir=C:\My Apps\7zip2\` | 未用 E87E 复跑 |
 | 4. expect_reboot | 部分通过（operator-reported） | 第一次停在“完成后需要重启”，exit 2 并写账本；重启后第二次账本命中跳过并标 unverified | 缺 `LastBootUpTime` 工件，未独立确认 |
 | 5. winget 包 | 未完成（E87E 源超时；6CFCA6 历史） | 6CFCA6 第一次 apply 完成；E87E 复跑失败 | 最终二进制未完成；注册点未补证 |
 | 6. 降级目录丢失 | 历史通过（alpha 455C，未用 6CFCA6 复跑） | `fallback_plan=null`；无 `[降级]`；标记文件 `MARKER=NO` | 不阻塞本轮 1–5 |
@@ -69,7 +70,7 @@ go build -trimpath -buildvcs=false -ldflags "-s -w -X main.version=0.1.0-alpha" 
 | 12. 回滚限制 | 部分通过（旧二进制，非最终） | 安装目录-only journal 无 PATH 快照，rollback 报错；7-Zip 仍安装 | PATH 回滚沿用 2026-11-03 F7 结果，本轮未重跑 |
 | 13. 重装失败报告 | 历史通过（alpha 455C，未用 6CFCA6 复跑） | `fail-setup.exe` 退出 1；报告 `status=failed`、`failure_reason=simulated installer failure: exit 1`；无账本 | 未出现 `succeeded` |
 
-最终 alpha E87E 明确通过项为场景 1–3；场景 4 部分通过（operator-reported）；场景 5 未完成；
+最终 alpha E87E 明确通过项为场景 1–2；场景 3 为 6CFCA6 历史；场景 4 部分通过（operator-reported）；场景 5 未完成；
 场景 6/13 为 alpha 455C 历史结果；场景 7–10 为旧二进制历史结果；场景 11 未验证；场景 12 部分通过。
 
 ## P1 修复复验（alpha 6CFCA6）
@@ -406,12 +407,12 @@ reinstall      = true
 
 报告与 journal 见 `docs/evidence/install-dir-20261115/`：
 
-- `p1-7zip-first.json` / `p1-7zip-second.json` / `p1-7zip-dir2-apply.txt`：场景 1–3（alpha 6CFCA6）
+- `p1-7zip-first.json` / `p1-7zip-second.json` / `p1-7zip-dir2-apply.txt`：场景 1–3（alpha 6CFCA6 历史）
 - `p1-noop-first.json` / `p1-noop-second.json`：场景 4（alpha 6CFCA6）
 - `p1-winget-apply1.txt` / `p1-winget-apply2.txt` / `p1-winget-ledger.yaml`：场景 5（alpha 6CFCA6）
 - `p1-npp-first.json` / `p1-npp-second.json` / `p1-npp-check.txt`：NPP builtin 无 verify 复跑
 - `p2-deny-git-npp.txt`：Git/Notepad++ 本地目录决策被拒绝的 dry-run 输出
-- `p2-7zip-e87-apply1.txt` / `p2-7zip-e87-apply2.txt`：E87E 7zip 本地含空格目录两次 apply
+- `p2-7zip-e87-apply1.txt` / `p2-7zip-e87-apply2.txt`：场景 1–2（E87E）7zip 本地含空格目录两次 apply
 - `p2-winget-e87-apply1.txt`：E87E winget 首次 apply 源超时记录
 - `alpha-7zip-first.json` / `alpha-7zip-second.json` / `alpha-7zip-dir2.json` / `alpha-noop-first.json` / `alpha-noop-second.json`：alpha 455C 历史结果
 - `alpha-winget-dryrun.txt` / `alpha-winget-apply.json` / `alpha-winget-apply.md` / `alpha-winget-check.txt` / `alpha-winget-ledger.yaml` / `alpha-winget-source-update.txt`：场景 5 alpha 455C 历史结果
