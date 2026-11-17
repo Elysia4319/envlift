@@ -44,11 +44,11 @@ func TestRecipesMergeUserOverridesBuiltin(t *testing.T) {
 	}
 }
 
-func TestCLIPlanUsesBuiltinGitInstallDirArg(t *testing.T) {
+func TestCLIPlanUsesBuiltin7zipInstallDirArg(t *testing.T) {
 	cfg := &config.Config{
 		App: config.AppName, Schema: config.CurrentSchema,
 		Software: []config.Software{{
-			Name: "Git", Version: config.StringPtr("2.56.0"),
+			Name: "7-Zip", Version: config.StringPtr("25.01"),
 			Sources: []string{"registry"}, SilentCapable: true,
 		}},
 	}
@@ -62,7 +62,7 @@ func TestCLIPlanUsesBuiltinGitInstallDirArg(t *testing.T) {
 			Drives:   []string{"C:", "D:"},
 		},
 		InstallerDir:   `C:\proj\installers`,
-		InstallerFiles: []string{"Git-2.56.0-64-bit.exe"},
+		InstallerFiles: []string{"7z2501-x64.exe"},
 		Recipes:        recipes.Merge(cfg),
 		Now:            time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 		Exists:         func(string) bool { return true },
@@ -73,9 +73,9 @@ func TestCLIPlanUsesBuiltinGitInstallDirArg(t *testing.T) {
 		t.Fatalf("基础计划失败: %v", err)
 	}
 	if len(base.Items) != 1 || base.Items[0].Tier != plan.TierLocal {
-		t.Fatalf("内置 Git 应命中本地层级: %+v", base.Items)
+		t.Fatalf("内置 7zip 应命中本地层级: %+v", base.Items)
 	}
-	dir := `D:\Apps\Git`
+	dir := `C:\My Apps\7zip`
 	opts.Decisions = plan.Decisions{{
 		TargetID: base.Items[0].TargetID, Kind: plan.DecKindSoftware,
 		Action: plan.ActionSetLocation,
@@ -89,7 +89,7 @@ func TestCLIPlanUsesBuiltinGitInstallDirArg(t *testing.T) {
 	if !it.InstallDirApplied || !it.Reinstall {
 		t.Fatalf("应标记目录应用与重装: %+v", it)
 	}
-	if !strings.Contains(it.Command, `/DIR="D:\Apps\Git"`) {
-		t.Fatalf("内置 Git 命令应含 /DIR: %q", it.Command)
+	if !strings.Contains(it.Command, `/D=C:\My Apps\7zip`) {
+		t.Fatalf("内置 7zip 命令应含 /D=: %q", it.Command)
 	}
 }

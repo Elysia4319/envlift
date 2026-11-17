@@ -8,6 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/Elysia4319/envlift/internal/config"
+	"github.com/Elysia4319/envlift/internal/recipes"
 	"github.com/Elysia4319/envlift/internal/relocation"
 	"github.com/Elysia4319/envlift/internal/targetid"
 )
@@ -474,6 +475,40 @@ func TestWingetForceBlockStaysGlobal(t *testing.T) {
 		if it.Name == "Other" && it.Status != StatusPlanned {
 			t.Errorf("其它条目本身不应被改写: %+v", it)
 		}
+	}
+}
+
+func TestSetLocationRejectsUnverifiedBuiltinDirArgs(t *testing.T) {
+	cases := []struct {
+		name     string
+		wingetID string
+		file     string
+	}{
+		{name: "Git", wingetID: "Git.Git", file: "Git-2.56.0-64-bit.exe"},
+		{name: "Notepad++", wingetID: "Notepad++.Notepad++", file: "npp.8.8.1.Installer.exe"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			cfg := baseConfig()
+			cfg.Software = []config.Software{software(c.name, "1.0", c.wingetID)}
+			target := okTarget()
+			target.WingetOK = false
+			p := mustBuild(t, testOptions(cfg, target, []string{c.file}, recipes.Builtin()))
+			if len(p.Items) != 1 || p.Items[0].Tier != TierLocal {
+				t.Fatalf("应命中本地配方: %+v", p.Items)
+			}
+			if p.Items[0].InstallDirSupported {
+				t.Errorf("未验证的本地目录参数不应标记 supported")
+			}
+			issues := decisionsIssues(t, p, Decisions{{
+				TargetID: p.Items[0].TargetID, Kind: DecKindSoftware,
+				Action: ActionSetLocation,
+				Params: &DecisionParams{InstallDir: ptr(`D:\Apps\App`)},
+			}})
+			if len(issues) != 1 || !strings.Contains(issues[0].Reason, "未声明安装目录参数") {
+				t.Fatalf("应拒绝未验证的本地目录: %+v", issues)
+			}
+		})
 	}
 }
 

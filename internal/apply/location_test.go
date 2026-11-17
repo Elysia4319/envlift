@@ -91,3 +91,47 @@ func TestInstallLocationsKeepsDistinctPathsAndVerifyIsUnverified(t *testing.T) {
 		t.Fatalf("多候选应标 unverified 并列出候选: %+v", step)
 	}
 }
+
+func TestInstallLocationsReturnsErrorWhenNoCandidates(t *testing.T) {
+	tree := fakeUninstallTree{
+		subkeys: map[string][]string{
+			fakeTreeKey(winreg.HiveLocalMachine, winreg.View64): {"App"},
+		},
+		values: map[string]winreg.Values{},
+	}
+	r := &RegistryLocationReader{tree: tree}
+	locs, err := r.InstallLocations("App")
+	if err == nil || locs != nil {
+		t.Fatalf("零候选且有读取错误时应返回错误: locs=%#v err=%v", locs, err)
+	}
+}
+
+func TestInstallLocationsNotFoundWithoutError(t *testing.T) {
+	r := &RegistryLocationReader{tree: fakeUninstallTree{
+		subkeys: map[string][]string{},
+		values:  map[string]winreg.Values{},
+	}}
+	locs, err := r.InstallLocations("App")
+	if err != nil || len(locs) != 0 {
+		t.Fatalf("无键无错误时应返回空: locs=%#v err=%v", locs, err)
+	}
+}
+
+func TestInstallLocationsKeepsCandidateDespiteOtherReadError(t *testing.T) {
+	tree := fakeUninstallTree{
+		subkeys: map[string][]string{
+			fakeTreeKey(winreg.HiveLocalMachine, winreg.View64):     {"App"},
+			fakeTreeKey(winreg.HiveCurrentUser, winreg.ViewDefault): {"Bad"},
+		},
+		values: map[string]winreg.Values{
+			fakeValueKey(winreg.HiveLocalMachine, winreg.View64, uninstallKey+`\App`): {
+				Str: map[string]string{"DisplayName": "App", "InstallLocation": `D:\Apps\App`},
+			},
+		},
+	}
+	r := &RegistryLocationReader{tree: tree}
+	locs, err := r.InstallLocations("App")
+	if err != nil || len(locs) != 1 || locs[0] != `D:\Apps\App` {
+		t.Fatalf("已有候选时不应因其它键读取失败丢弃候选: locs=%#v err=%v", locs, err)
+	}
+}

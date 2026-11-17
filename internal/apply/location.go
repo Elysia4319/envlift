@@ -54,15 +54,22 @@ func (r *RegistryLocationReader) InstallLocation(name string) (string, bool, err
 func (r *RegistryLocationReader) InstallLocations(name string) ([]string, error) {
 	want := strings.TrimSpace(name)
 	var out []string
+	var firstErr error
 	for _, t := range locationTargets {
 		subs, err := r.tree.SubKeys(t.hive, uninstallKey, t.view)
 		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
 			continue
 		}
 		for _, sub := range subs {
 			vals, err := r.tree.ReadValues(t.hive, uninstallKey+`\`+sub, t.view,
 				[]string{"DisplayName", "InstallLocation"}, nil)
 			if err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
 				continue
 			}
 			if !strings.EqualFold(strings.TrimSpace(vals.Str["DisplayName"]), want) {
@@ -73,7 +80,11 @@ func (r *RegistryLocationReader) InstallLocations(name string) ([]string, error)
 			}
 		}
 	}
-	return dedupeLocations(out), nil
+	out = dedupeLocations(out)
+	if len(out) == 0 && firstErr != nil {
+		return nil, firstErr
+	}
+	return out, nil
 }
 
 // dedupeLocations 按归一化目录去重，保留首次出现的原始写法。

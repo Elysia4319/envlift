@@ -4,11 +4,11 @@ import "testing"
 
 func TestBuiltinInstallDirCoverage(t *testing.T) {
 	local := map[string]bool{
-		"git": true, "vscode": true, "python": true, "7zip": true, "notepadplusplus": true,
+		"vscode": true, "python": true, "7zip": true,
 	}
 	winget := map[string]bool{
-		"git": true, "vscode": true, "node": true, "python": true,
-		"go": true, "7zip": true, "notepadplusplus": true, "pwsh": true,
+		"vscode": true, "node": true, "python": true,
+		"go": true, "7zip": true, "pwsh": true,
 	}
 	seen := map[string]bool{}
 	for _, r := range Builtin() {
@@ -39,11 +39,22 @@ func TestBuiltinInstallDirCoverage(t *testing.T) {
 
 func TestBuiltinNsisInstallDirArgUsesRestOfLine(t *testing.T) {
 	for _, r := range Builtin() {
-		if r.Name != "7zip" && r.Name != "notepadplusplus" {
+		if r.Name != "7zip" {
 			continue
 		}
 		if r.InstallDirArg != `/D={install_dir}` {
 			t.Errorf("%s 的 NSIS /D 参数应使用剩余整行模板，实际 %q", r.Name, r.InstallDirArg)
+		}
+	}
+}
+
+func TestUnverifiedBuiltinLocalDirIsDisabled(t *testing.T) {
+	for _, r := range Builtin() {
+		if r.Name != "git" && r.Name != "notepadplusplus" {
+			continue
+		}
+		if r.InstallDirArg != "" || r.WingetLocationArg != "" || r.InstallDirSource != "" {
+			t.Errorf("%s 的目录参数尚未验证，必须保持为空: %+v", r.Name, r)
 		}
 	}
 }

@@ -881,6 +881,10 @@
   // 写一条决策并重算计划：决策会改变 plan_hash，确认态必须作废。
   function putDecision(d) {
     var prev = state.decisions;
+    var prevDec = decisionOf(d.target_id);
+    if (prevDec && prevDec.action === 'select' && d.action === 'set_location') {
+      if (!window.confirm('将替换版本决策（select），继续？')) { return; }
+    }
     var out = [];
     var replaced = false;
     prev.forEach(function (x) {
@@ -926,14 +930,18 @@
         + '</select></label>';
     }
 
-    var dirOk = (it.tier === 'local' || it.tier === 'winget') && it.install_dir_supported;
+    var forceOk = it.tier !== 'winget' ||
+      (state.plan && state.plan.target && state.plan.target.winget_force_ok === true);
+    var dirOk = (it.tier === 'local' || it.tier === 'winget') && it.install_dir_supported && forceOk;
     html += '<label class="field"><span class="hint">安装目录</span>'
       + '<input class="dec-installdir" type="text" spellcheck="false" placeholder="安装目录，如 D:\\Apps\\Git"'
       + (dirOk ? '' : ' disabled') + ' aria-label="安装目录"></label>'
       + '<button class="btn btn-ghost btn-sm dec-apply-dir" type="button"'
       + (dirOk ? '' : ' disabled') + '>指定目录</button>'
       + (dirOk ? '' : '<span class="hint">'
-        + (it.decision === 'select' ? '当前版本不支持与选包/选配方组合' : '该配方不支持指定安装目录')
+        + (it.decision === 'select' ? '当前版本不支持与选包/选配方组合'
+          : (it.tier === 'winget' && !forceOk ? '本机 winget 不支持 --force，不能指定目录'
+            : '该配方不支持指定安装目录'))
         + '</span>');
 
     html += '<button class="btn btn-ghost btn-sm dec-act" data-action="skip" type="button">跳过</button>'

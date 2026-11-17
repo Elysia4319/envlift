@@ -72,7 +72,7 @@ type Target struct {
 	WingetOK  bool   `json:"winget_ok"`
 	WingetVer string `json:"winget_version,omitempty"`
 	// WingetForceOK 表示本机 winget 的 install 子命令支持 --force。
-	WingetForceOK bool `json:"winget_force_ok,omitempty"`
+	WingetForceOK bool `json:"winget_force_ok"`
 	NetworkOK     bool `json:"network_ok"`
 	// NetworkNote 说明网络判定的依据（探测失败时写原因）。
 	NetworkNote string `json:"network_note,omitempty"`
