@@ -136,6 +136,9 @@ type Options struct {
 	Relocations *relocation.Ledger
 	// CondaPackageMode 决定恢复 conda 包、pip 包或两者；默认 both。
 	CondaPackageMode string
+	// CondaModeExplicit 表示 CLI 显式传了 --conda-packages；此时对非 base
+	// 环境做全局覆盖，忽略 per-env 开关。GUI 不设置此字段。
+	CondaModeExplicit bool
 	// CondaWorkDir 是临时 environment.yml / .condarc / pip.ini 的根目录。
 	CondaWorkDir string
 }
@@ -866,14 +869,20 @@ func buildCondaItems(cfg *config.Config, opts Options, p *Plan, mode string) []I
 		if present {
 			it.Current = state.PythonVersion
 		}
+		restoreConda := env.CondaEnabled()
+		restorePip := env.PipEnabled()
+		if opts.CondaModeExplicit && !env.Base && mode != CondaModeNone {
+			restoreConda = condaModeIncludes(mode, CondaModeConda)
+			restorePip = condaModeIncludes(mode, CondaModePip)
+		}
 		spec := &CondaSpec{
 			Name: name, Prefix: prefix, Manager: opts.Expand(env.Manager),
 			CondaExe: opts.Expand(env.CondaExe), PythonVersion: env.PythonVersion,
 			Mirror: env.Mirror, WorkDir: condaEnvWorkDir(opts.CondaWorkDir, name),
 			Profile:  mirrorProfile(cfg, env.Mirror),
 			Packages: env.Packages, PipPackages: env.PipPackages,
-			RestoreConda: env.CondaEnabled() && condaModeIncludes(mode, CondaModeConda),
-			RestorePip:   env.PipEnabled() && condaModeIncludes(mode, CondaModePip),
+			RestoreConda: restoreConda && condaModeIncludes(mode, CondaModeConda),
+			RestorePip:   restorePip && condaModeIncludes(mode, CondaModePip),
 			Create:       !present,
 		}
 		it.Conda = spec

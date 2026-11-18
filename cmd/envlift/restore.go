@@ -52,6 +52,12 @@ func runRestore(args []string) int {
 	if err := fs.Parse(args); err != nil {
 		return exitError
 	}
+	condaExplicit := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "conda-packages" {
+			condaExplicit = true
+		}
+	})
 
 	// 回滚不依赖配置：只需要 journal 里的 PATH 快照。
 	if *rollback {
@@ -133,20 +139,21 @@ func runRestore(args []string) int {
 	}
 
 	p, err := plan.Build(plan.Options{
-		Config:           cfg,
-		Target:           target,
-		InstallerDir:     absInstallerDir,
-		InstallerFiles:   files,
-		Recipes:          recipes.Merge(cfg),
-		Now:              time.Now(),
-		Exists:           pathExists,
-		Expand:           redactor.ExpandString,
-		ExpandVars:       pathenv.ExpandVars,
-		RawConfig:        rawMode,
-		Decisions:        ds,
-		Relocations:      ledger,
-		CondaPackageMode: *condaPackages,
-		CondaWorkDir:     filepath.Join(*journalDir, "conda"),
+		Config:            cfg,
+		Target:            target,
+		InstallerDir:      absInstallerDir,
+		InstallerFiles:    files,
+		Recipes:           recipes.Merge(cfg),
+		Now:               time.Now(),
+		Exists:            pathExists,
+		Expand:            redactor.ExpandString,
+		ExpandVars:        pathenv.ExpandVars,
+		RawConfig:         rawMode,
+		Decisions:         ds,
+		Relocations:       ledger,
+		CondaPackageMode:  *condaPackages,
+		CondaModeExplicit: condaExplicit,
+		CondaWorkDir:      filepath.Join(*journalDir, "conda"),
 	})
 	if err != nil {
 		var derr *plan.DecisionErrors

@@ -140,6 +140,40 @@ func TestCondaRestoreDefaultsFalse(t *testing.T) {
 	}
 }
 
+func TestCondaNameAndPrefixValidation(t *testing.T) {
+	base := func() *Config {
+		return &Config{
+			App: AppName, Schema: CurrentSchema,
+			SourceMachine: SourceMachine{Arch: "amd64", Hostname: "${HOST}", Username: "${USER}"},
+			Path:          PathSection{User: []PathEntry{}, Machine: []PathEntry{}},
+			Runtimes:      []Runtime{}, Software: []Software{},
+			CondaEnvs: []CondaEnv{{Name: "py311", Prefix: `C:\env`}},
+		}
+	}
+	cases := []struct {
+		name   string
+		mutate func(*Config)
+	}{
+		{"name space", func(c *Config) { c.CondaEnvs[0].Name = "py 311" }},
+		{"name quote", func(c *Config) { c.CondaEnvs[0].Name = `py"311` }},
+		{"name trailing", func(c *Config) { c.CondaEnvs[0].Name = "py311 " }},
+		{"prefix quote", func(c *Config) { c.CondaEnvs[0].Prefix = `C:\env"x` }},
+		{"prefix trailing", func(c *Config) { c.CondaEnvs[0].Prefix = `C:\env ` }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := base()
+			tc.mutate(c)
+			if err := c.Validate(); err == nil {
+				t.Fatalf("应拒绝: %+v", c.CondaEnvs[0])
+			}
+		})
+	}
+	if err := base().Validate(); err != nil {
+		t.Fatalf("合法输入被拒绝: %v", err)
+	}
+}
+
 func TestSchemaV3Rejected(t *testing.T) {
 	src := `
 app: envlift

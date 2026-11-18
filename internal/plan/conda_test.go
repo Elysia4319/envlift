@@ -161,6 +161,33 @@ func TestCondaModeDefaultIsNone(t *testing.T) {
 	}
 }
 
+func TestCondaExplicitModeOverridesScanDefaults(t *testing.T) {
+	env := sampleCondaEnv()
+	no := false
+	env.RestoreConda = &no
+	env.RestorePip = &no
+	cfg := condaBaseConfig(env)
+	opts := condaOptions(cfg, Target{CondaEnvs: map[string]CondaEnvState{}})
+	opts.CondaPackageMode = CondaModeConda
+	opts.CondaModeExplicit = true
+	p, err := Build(opts)
+	if err != nil {
+		t.Fatalf("Build 失败: %v", err)
+	}
+	if p.Items[0].Status != StatusPlanned || !p.Items[0].Conda.RestoreConda {
+		t.Fatalf("显式 --conda-packages=conda 应覆盖 fresh scan 默认值: %+v", p.Items[0])
+	}
+
+	opts.CondaModeExplicit = false
+	p, err = Build(opts)
+	if err != nil {
+		t.Fatalf("Build 失败: %v", err)
+	}
+	if p.Items[0].Status != StatusSkipped {
+		t.Fatalf("未显式覆盖时 per-env 默认 false 应 skipped: %+v", p.Items[0])
+	}
+}
+
 func TestCondaPlanSameNameDifferentPrefixIsNotSkipped(t *testing.T) {
 	cfg := condaBaseConfig(sampleCondaEnv())
 	target := Target{CondaEnvs: map[string]CondaEnvState{

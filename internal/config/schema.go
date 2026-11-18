@@ -288,8 +288,14 @@ func (c *Config) validate() error {
 		if strings.TrimSpace(env.Name) == "" {
 			return fmt.Errorf("conda_envs[%d].name 不能为空", i)
 		}
+		if err := validateCondaName(env.Name); err != nil {
+			return fmt.Errorf("conda_envs[%d].name %s", i, err)
+		}
 		if strings.TrimSpace(env.Prefix) == "" {
 			return fmt.Errorf("conda_envs[%d](%s).prefix 不能为空", i, env.Name)
+		}
+		if err := validateCondaPrefix(env.Prefix); err != nil {
+			return fmt.Errorf("conda_envs[%d](%s).prefix %s", i, env.Name, err)
 		}
 		if env.Mirror != "" {
 			if _, ok := c.Mirrors[env.Mirror]; !ok {
@@ -314,6 +320,40 @@ func (c *Config) validate() error {
 		}
 		if err := validateMirrorProfile(profile); err != nil {
 			return fmt.Errorf("mirrors[%s] %s", name, err)
+		}
+	}
+	return nil
+}
+
+// validateCondaName 校验环境名。conda 自身不允许空格、斜杠、冒号和 #。
+func validateCondaName(name string) error {
+	if name != strings.TrimSpace(name) {
+		return fmt.Errorf("不得有首尾空格")
+	}
+	for _, r := range name {
+		switch {
+		case r == ' ' || r == '/' || r == '\\' || r == ':' || r == '#':
+			return fmt.Errorf("不得包含空格、斜杠、冒号或 #")
+		case r == '"' || r == '\'':
+			return fmt.Errorf("不得包含引号")
+		case r < 0x20 || r == 0x7f:
+			return fmt.Errorf("不得包含控制字符")
+		}
+	}
+	return nil
+}
+
+// validateCondaPrefix 校验 prefix；允许父目录含空格，但拒绝引号、控制字符与尾随空格。
+func validateCondaPrefix(prefix string) error {
+	if prefix != strings.TrimSpace(prefix) {
+		return fmt.Errorf("不得有首尾空格")
+	}
+	for _, r := range prefix {
+		if r == '"' || r == '\'' {
+			return fmt.Errorf("不得包含引号")
+		}
+		if r < 0x20 || r == 0x7f {
+			return fmt.Errorf("不得包含控制字符")
 		}
 	}
 	return nil

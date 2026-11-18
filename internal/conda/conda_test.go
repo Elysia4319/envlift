@@ -224,3 +224,19 @@ func TestFilterPipBootstrapOption(t *testing.T) {
 		t.Fatalf("保留选项应保留基础包: %+v", kept)
 	}
 }
+
+func TestPipConfigMultipleExtraIndexURLs(t *testing.T) {
+	p := &config.MirrorProfile{
+		PipIndexURL:   "https://pypi.example/simple",
+		PipExtraIndex: []string{"https://a.example/simple", "https://b.example/simple"},
+	}
+	cfg := string(PipConfig(p))
+	if strings.Count(cfg, "extra-index-url = ") != 2 {
+		t.Fatalf("应写两行 extra-index-url: %s", cfg)
+	}
+	for _, want := range []string{"a.example", "b.example"} {
+		if !strings.Contains(cfg, want) {
+			t.Fatalf("PipConfig 缺少 %s: %s", want, cfg)
+		}
+	}
+}
