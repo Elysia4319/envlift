@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Elysia4319/envlift/internal/conda"
 	"github.com/Elysia4319/envlift/internal/config"
 	"github.com/Elysia4319/envlift/internal/match"
 	"github.com/Elysia4319/envlift/internal/relocation"
@@ -25,7 +26,19 @@ import (
 const (
 	TierWinget = "winget"
 	TierLocal  = "local"
+	TierConda  = "conda"
 	TierManual = "manual"
+)
+
+// KindCondaEnv 是 conda 环境条目的 kind。
+const KindCondaEnv = targetid.KindCondaEnv
+
+// conda 包恢复范围（--conda-packages）。
+const (
+	CondaModeConda = "conda"
+	CondaModePip   = "pip"
+	CondaModeBoth  = "both"
+	CondaModeNone  = "none"
 )
 
 // 条目状态。
@@ -61,6 +74,15 @@ type RuntimeState struct {
 	Path    string `json:"path,omitempty"`
 }
 
+// CondaEnvState 是目标机上某个 conda 环境的现状。
+type CondaEnvState struct {
+	Present       bool                           `json:"present"`
+	Prefix        string                         `json:"prefix,omitempty"`
+	PythonVersion string                         `json:"python_version,omitempty"`
+	Packages      map[string]config.CondaPackage `json:"packages,omitempty"`
+	PipPackages   map[string]config.PipPackage   `json:"pip_packages,omitempty"`
+}
+
 // Target 是目标机环境探测结果。dry-run 时就是本机。
 type Target struct {
 	OS        string `json:"os"`
@@ -78,6 +100,8 @@ type Target struct {
 	NetworkNote string `json:"network_note,omitempty"`
 	// Runtimes 以运行时名为键。
 	Runtimes map[string]RuntimeState `json:"runtimes"`
+	// CondaEnvs 以 conda 环境名为键；同名多安装由配置侧判歧义。
+	CondaEnvs map[string]CondaEnvState `json:"conda_envs,omitempty"`
 	// PathDirs 是目标机当前 PATH 的展开值，用于比对。
 	PathDirs []string `json:"path_dirs"`
 	// Drives 是目标机盘符，形如 "C:"。
@@ -108,6 +132,10 @@ type Options struct {
 	Decisions Decisions
 	// Relocations 是本机重装账本；命中时 set_location 不再重复重装。
 	Relocations *relocation.Ledger
+	// CondaPackageMode 决定恢复 conda 包、pip 包或两者；默认 both。
+	CondaPackageMode string
+	// CondaWorkDir 是临时 environment.yml / .condarc / pip.ini 的根目录。
+	CondaWorkDir string
 }
 
 // DetectRaw 判定配置是否为 --raw 导出。
@@ -187,6 +215,28 @@ type Item struct {
 	Hive     string `json:"hive,omitempty"`
 	ArchView string `json:"arch_view,omitempty"`
 	Pinned   bool   `json:"pinned,omitempty"`
+	// Conda 是 conda_env 条目的执行参数；其他 kind 为 nil。
+	Conda *CondaSpec `json:"conda,omitempty"`
+	// CondaMissing / PipMissing 是计划生成时算出的缺包摘要，供 GUI 与报告展示。
+	CondaMissing []string `json:"conda_missing,omitempty"`
+	PipMissing   []string `json:"pip_missing,omitempty"`
+}
+
+// CondaSpec 是一条 conda_env 计划项的执行参数。
+type CondaSpec struct {
+	Name          string                `json:"name"`
+	Prefix        string                `json:"prefix"`
+	Manager       string                `json:"manager,omitempty"`
+	CondaExe      string                `json:"conda_exe,omitempty"`
+	PythonVersion string                `json:"python_version,omitempty"`
+	Mirror        string                `json:"mirror,omitempty"`
+	Profile       *config.MirrorProfile `json:"mirror_profile,omitempty"`
+	WorkDir       string                `json:"work_dir"`
+	Packages      []config.CondaPackage `json:"packages,omitempty"`
+	PipPackages   []config.PipPackage   `json:"pip_packages,omitempty"`
+	RestoreConda  bool                  `json:"restore_conda"`
+	RestorePip    bool                  `json:"restore_pip"`
+	Create        bool                  `json:"create"`
 }
 
 // PathChange 是一条 PATH 变更计划。
@@ -217,6 +267,7 @@ type Summary struct {
 	Total     int `json:"total"`
 	Winget    int `json:"winget"`
 	Local     int `json:"local"`
+	Conda     int `json:"conda"`
 	Manual    int `json:"manual"`
 	Skipped   int `json:"skipped"`
 	Pending   int `json:"pending_confirm"`
@@ -240,6 +291,8 @@ type Plan struct {
 	Path        []PathChange `json:"path_changes"`
 	Warnings    []string     `json:"warnings,omitempty"`
 	Summary     Summary      `json:"summary"`
+	// CondaPackageMode 是本计划采用的 conda/pip 恢复范围。
+	CondaPackageMode string `json:"conda_package_mode,omitempty"`
 	// Blocked 非空表示计划不可执行（有环），此时不产出可执行计划（C10）。
 	Blocked string `json:"blocked,omitempty"`
 
@@ -293,6 +346,13 @@ func Build(opts Options) (*Plan, error) {
 	if now.IsZero() {
 		now = time.Now()
 	}
+	condaMode, err := normalizeCondaMode(opts.CondaPackageMode)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(opts.CondaWorkDir) == "" {
+		opts.CondaWorkDir = filepath.Join("reports", "conda")
+	}
 
 	matcher, err := match.NewMatcher(opts.Recipes)
 	if err != nil {
@@ -314,6 +374,7 @@ func Build(opts Options) (*Plan, error) {
 		locationResolvers: map[string]func(Item, string) Item{},
 		recipeInput:       opts.Recipes,
 		relocations:       opts.Relocations,
+		CondaPackageMode:  condaMode,
 	}
 
 	byRecipe := matchInstallerFiles(opts.Recipes, opts.InstallerFiles)
@@ -330,6 +391,7 @@ func Build(opts Options) (*Plan, error) {
 	items := make([]Item, 0, len(cfg.Software)+len(cfg.Runtimes))
 	items = append(items, buildSoftwareItems(cfg, opts, matcher, byRecipe, p)...)
 	items = append(items, buildRuntimeItems(cfg, opts, matcher, byRecipe, p)...)
+	items = append(items, buildCondaItems(cfg, opts, p, condaMode)...)
 
 	// dedupe 会抹掉被覆盖条目的层级与命令，而 ④ 的「改选代表」要把它恢复回来，
 	// 所以先留一份去重前的快照。
@@ -756,6 +818,231 @@ func buildRuntimeItems(cfg *config.Config, opts Options, m *match.Matcher, byRec
 	return items
 }
 
+// buildCondaItems 把 conda_envs 转成计划条目。
+//
+// 定级规则：
+//   - base：manual/只读，永不自动改；
+//   - 同名环境多于一个：needs-disambiguation；
+//   - 不存在：planned，create；
+//   - 存在且有缺包：planned，update；
+//   - 包已匹配：skipped。
+func buildCondaItems(cfg *config.Config, opts Options, p *Plan, mode string) []Item {
+	dupes := map[string]int{}
+	for _, env := range cfg.CondaEnvs {
+		dupes[strings.ToLower(strings.TrimSpace(env.Name))]++
+	}
+	items := make([]Item, 0, len(cfg.CondaEnvs))
+	for _, env := range cfg.CondaEnvs {
+		name := strings.TrimSpace(opts.Expand(env.Name))
+		it := Item{
+			TargetID: targetid.CondaEnv(env), Kind: KindCondaEnv, Name: name,
+			Status: StatusPlanned, Tier: TierConda, NeedsAdmin: false,
+			Expected: env.PythonVersion,
+		}
+		state, present := opts.Target.CondaEnvs[env.Name]
+		if present {
+			it.Current = state.PythonVersion
+		}
+		spec := &CondaSpec{
+			Name: name, Prefix: opts.Expand(env.Prefix), Manager: opts.Expand(env.Manager),
+			CondaExe: opts.Expand(env.CondaExe), PythonVersion: env.PythonVersion,
+			Mirror: env.Mirror, WorkDir: condaEnvWorkDir(opts.CondaWorkDir, name),
+			Profile:  mirrorProfile(cfg, env.Mirror),
+			Packages: env.Packages, PipPackages: env.PipPackages,
+			RestoreConda: env.CondaEnabled() && condaModeIncludes(mode, CondaModeConda),
+			RestorePip:   env.PipEnabled() && condaModeIncludes(mode, CondaModePip),
+			Create:       !present,
+		}
+		it.Conda = spec
+
+		switch {
+		case env.Base:
+			it.Status = StatusManual
+			it.Tier = TierManual
+			it.Reason = "base 环境默认只读，不进入自动恢复列表"
+			it.ManualHint = "base 环境可能承载 conda 自身与用户全局工具；如确需修改，请手工运行 conda 命令"
+		case dupes[strings.ToLower(env.Name)] > 1:
+			it.Status = StatusAmbiguous
+			it.Tier = ""
+			it.Reason = fmt.Sprintf("配置里有 %d 个同名 conda 环境 %q，需先删除或改名重复项",
+				dupes[strings.ToLower(env.Name)], name)
+		case !spec.RestoreConda && !spec.RestorePip:
+			it.Status = StatusSkipped
+			it.Tier = ""
+			it.Reason = "本次未选择恢复 conda 包或 pip 包"
+		case !present && !spec.RestoreConda:
+			it.Status = StatusManual
+			it.Tier = TierManual
+			it.Reason = "目标机没有该环境，且未启用 conda 包恢复，无法只靠 pip 创建环境"
+			it.ManualHint = fmt.Sprintf("先手工创建环境：conda create -n %s python=%s", name, orUnknown(env.PythonVersion))
+		case !present:
+			it.Reason = "目标机不存在该环境，将创建并安装包"
+			for _, pk := range env.Packages {
+				it.CondaMissing = append(it.CondaMissing, pk.Name)
+			}
+			if spec.RestorePip {
+				for _, pk := range env.PipPackages {
+					it.PipMissing = append(it.PipMissing, pk.Name)
+				}
+			}
+		case present:
+			gotConda := condaPackagesFromMap(state.Packages)
+			gotPip := pipPackagesFromMap(state.PipPackages)
+			if spec.RestoreConda {
+				it.CondaMissing = conda.CompareConda(env.Packages, gotConda)
+			}
+			if spec.RestorePip {
+				it.PipMissing = conda.ComparePip(env.PipPackages, gotPip)
+			}
+			if len(it.CondaMissing) == 0 && len(it.PipMissing) == 0 {
+				it.Status = StatusSkipped
+				it.Tier = ""
+				it.Reason = "conda 包与 pip 包均已匹配"
+			} else {
+				it.Reason = fmt.Sprintf("缺 %d 个 conda 包 / %d 个 pip 包，将更新环境",
+					len(it.CondaMissing), len(it.PipMissing))
+			}
+		}
+
+		if it.Status == StatusPlanned {
+			it.Command = condaCommand(spec)
+			it.VerifyCmd = condaVerifyCommand(spec)
+			it.Fallback = "失败不删除环境；按 journal 记录手工清理"
+			if len(it.CondaMissing) > 0 {
+				it.Reason += "；conda 缺包：" + summarizeMissing(it.CondaMissing, 6)
+			}
+			if len(it.PipMissing) > 0 {
+				it.Reason += "；pip 缺包：" + summarizeMissing(it.PipMissing, 6)
+			}
+		}
+		items = append(items, it)
+	}
+	return items
+}
+
+func summarizeMissing(list []string, limit int) string {
+	if len(list) <= limit {
+		return strings.Join(list, ", ")
+	}
+	return strings.Join(list[:limit], ", ") + fmt.Sprintf(" 等 %d 项", len(list))
+}
+
+func condaPackagesFromMap(m map[string]config.CondaPackage) []config.CondaPackage {
+	out := make([]config.CondaPackage, 0, len(m))
+	for _, p := range m {
+		out = append(out, p)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name)
+	})
+	return out
+}
+
+func pipPackagesFromMap(m map[string]config.PipPackage) []config.PipPackage {
+	out := make([]config.PipPackage, 0, len(m))
+	for _, p := range m {
+		out = append(out, p)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return conda.NormalizePipName(out[i].Name) < conda.NormalizePipName(out[j].Name)
+	})
+	return out
+}
+
+func condaEnvWorkDir(root, name string) string {
+	seg := strings.Map(func(r rune) rune {
+		switch r {
+		case '\\', '/', ':', '*', '?', '"', '<', '>', '|':
+			return '_'
+		}
+		return r
+	}, strings.TrimSpace(name))
+	seg = strings.TrimSpace(seg)
+	if seg == "" {
+		seg = "env"
+	}
+	return filepath.Join(root, seg)
+}
+
+func condaCommand(spec *CondaSpec) string {
+	return strings.Join(CondaCommands(spec), " && ")
+}
+
+// CondaCommands 返回 conda_env 计划项要顺序执行的真实命令。
+//
+// 返回多条而不是一条带 && 的字符串：执行器不经过 shell，&& 不会被解释。
+func CondaCommands(spec *CondaSpec) []string {
+	exe := condaExecutable(spec)
+	envFile := filepath.Join(spec.WorkDir, "environment.yml")
+	reqFile := filepath.Join(spec.WorkDir, "requirements.txt")
+	var out []string
+	if spec.RestoreConda {
+		if spec.Create {
+			out = append(out, quoteCommand(exe)+" env create --yes --prefix "+quoteCommand(spec.Prefix)+
+				" --file "+quoteCommand(envFile))
+		} else {
+			out = append(out, quoteCommand(exe)+" env update --yes --prefix "+quoteCommand(spec.Prefix)+
+				" --file "+quoteCommand(envFile))
+		}
+	}
+	if spec.RestorePip {
+		py := filepath.Join(spec.Prefix, "python.exe")
+		out = append(out, quoteCommand(py)+" -m pip install --no-input --disable-pip-version-check -r "+quoteCommand(reqFile))
+	}
+	return out
+}
+
+func condaVerifyCommand(spec *CondaSpec) string {
+	parts := []string{
+		quoteCommand(condaExecutable(spec)) + " list --json --prefix " + quoteCommand(spec.Prefix),
+	}
+	if spec.RestorePip {
+		parts = append(parts, quoteCommand(filepath.Join(spec.Prefix, "python.exe"))+" -m pip list --format=json")
+	}
+	return strings.Join(parts, " && ")
+}
+
+func condaExecutable(spec *CondaSpec) string {
+	if strings.TrimSpace(spec.CondaExe) != "" {
+		return spec.CondaExe
+	}
+	return "conda"
+}
+
+func mirrorProfile(cfg *config.Config, name string) *config.MirrorProfile {
+	if cfg == nil || strings.TrimSpace(name) == "" {
+		return nil
+	}
+	if p, ok := cfg.Mirrors[name]; ok {
+		return &p
+	}
+	return nil
+}
+
+func quoteCommand(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" || strings.ContainsAny(s, " \t") {
+		return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
+	}
+	return s
+}
+
+func normalizeCondaMode(mode string) (string, error) {
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	switch mode {
+	case "":
+		return CondaModeBoth, nil
+	case CondaModeConda, CondaModePip, CondaModeBoth, CondaModeNone:
+		return mode, nil
+	default:
+		return "", fmt.Errorf("--conda-packages 只能是 conda / pip / both / none，实际为 %q", mode)
+	}
+}
+
+func condaModeIncludes(mode, want string) bool {
+	return mode == CondaModeBoth || mode == want
+}
+
 // recipeNames 抽出候选配方名，作为「配方歧义」条目的候选列表。
 func recipeNames(all []match.Candidate) []string {
 	out := make([]string, 0, len(all))
@@ -922,7 +1209,8 @@ func runtimeManualReason(rt config.Runtime) string {
 
 // viable 报告该条目是否有可自动执行的层级（A4）。
 func viable(it Item) bool {
-	return it.Status == StatusPlanned && (it.Tier == TierWinget || it.Tier == TierLocal)
+	return it.Status == StatusPlanned &&
+		(it.Tier == TierWinget || it.Tier == TierLocal || it.Tier == TierConda)
 }
 
 // compareItems 按 A2 的优先级比较两个条目：可装 > arch64 > HKCU > 版本高。
@@ -1272,6 +1560,8 @@ func summarize(p *Plan) {
 				s.Winget++
 			case TierLocal:
 				s.Local++
+			case TierConda:
+				s.Conda++
 			}
 		}
 		if it.Decision != "" {

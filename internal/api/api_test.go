@@ -29,7 +29,7 @@ func fakeDeps() Deps {
 		Status: func(ctx context.Context) (any, error) {
 			return map[string]any{"os": "Windows 11", "elevated": false}, nil
 		},
-		Scan: func(ctx context.Context, raw bool, r task.Reporter) ([]byte, error) {
+		Scan: func(ctx context.Context, raw, keepPipBootstrap bool, r task.Reporter) ([]byte, error) {
 			r.Phase("读注册表", 1, 2)
 			r.Log("info", "扫描中")
 			r.Phase("winget list", 2, 2)
@@ -264,7 +264,7 @@ func TestCommitRejectsBadOnExist(t *testing.T) {
 func TestTaskBusyReturns409(t *testing.T) {
 	d := fakeDeps()
 	block := make(chan struct{})
-	d.Scan = func(ctx context.Context, raw bool, r task.Reporter) ([]byte, error) {
+	d.Scan = func(ctx context.Context, raw, keepPipBootstrap bool, r task.Reporter) ([]byte, error) {
 		<-block
 		return nil, nil
 	}
@@ -290,7 +290,7 @@ func TestTaskBusyReturns409(t *testing.T) {
 
 func TestTaskSinceIncremental(t *testing.T) {
 	d := fakeDeps()
-	d.Scan = func(ctx context.Context, raw bool, r task.Reporter) ([]byte, error) {
+	d.Scan = func(ctx context.Context, raw, keepPipBootstrap bool, r task.Reporter) ([]byte, error) {
 		r.Log("info", "a")
 		r.Log("info", "b")
 		r.Log("info", "c")

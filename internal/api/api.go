@@ -121,6 +121,17 @@ type CommitRequest struct {
 	Out        string
 	OnExist    string
 	Exclude    []string
+	// Conda 是 GUI 对扫描结果的 conda 开关覆盖；服务端按 name+manager 匹配。
+	Conda []CondaSetting
+}
+
+// CondaSetting 是扫描提交时对单个 conda 环境的恢复开关。
+type CondaSetting struct {
+	Name         string `json:"name"`
+	Manager      string `json:"manager,omitempty"`
+	RestoreConda *bool  `json:"restore_conda,omitempty"`
+	RestorePip   *bool  `json:"restore_pip,omitempty"`
+	Mirror       string `json:"mirror,omitempty"`
 }
 
 // CommitResult 回报写盘结果。
@@ -147,7 +158,7 @@ func (e *UnknownTargets) Error() string {
 
 type Deps struct {
 	Status     func(ctx context.Context) (any, error)
-	Scan       func(ctx context.Context, raw bool, r task.Reporter) ([]byte, error)
+	Scan       func(ctx context.Context, raw, keepPipBootstrap bool, r task.Reporter) ([]byte, error)
 	Commit     func(req CommitRequest) (CommitResult, error)
 	LoadConfig func(path string) (*config.Config, error)
 	BuildPlan  func(cfg *config.Config, decisions json.RawMessage) (*plan.Plan, error)
@@ -257,22 +268,24 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Raw bool `json:"raw"`
+		Raw              bool `json:"raw"`
+		KeepPipBootstrap bool `json:"keep_pip_bootstrap"`
 	}
 	if !decodeBody(w, r, &req) {
 		return
 	}
 	s.startTask(w, "scan", func(ctx context.Context, rep task.Reporter) ([]byte, error) {
-		return s.deps.Scan(ctx, req.Raw, rep)
+		return s.deps.Scan(ctx, req.Raw, req.KeepPipBootstrap, rep)
 	})
 }
 
 func (s *Server) handleScanCommit(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		TaskID  string   `json:"task_id"`
-		Out     string   `json:"out"`
-		OnExist string   `json:"on_exist"`
-		Exclude []string `json:"exclude"`
+		TaskID  string         `json:"task_id"`
+		Out     string         `json:"out"`
+		OnExist string         `json:"on_exist"`
+		Exclude []string       `json:"exclude"`
+		Conda   []CondaSetting `json:"conda"`
 	}
 	if !decodeBody(w, r, &req) {
 		return
@@ -291,6 +304,7 @@ func (s *Server) handleScanCommit(w http.ResponseWriter, r *http.Request) {
 		Out:        req.Out,
 		OnExist:    req.OnExist,
 		Exclude:    req.Exclude,
+		Conda:      req.Conda,
 	})
 	if err != nil {
 		var unknown *UnknownTargets
@@ -675,9 +689,9 @@ func validateDecisionShape(ds plan.Decisions) *APIError {
 			add("缺少 target_id")
 		}
 		switch d.Kind {
-		case plan.DecKindSoftware, plan.DecKindRuntime, plan.DecKindPath:
+		case plan.DecKindSoftware, plan.DecKindRuntime, plan.DecKindCondaEnv, plan.DecKindPath:
 		default:
-			add(fmt.Sprintf("未知 kind=%q（只允许 software / runtime / path）", d.Kind))
+			add(fmt.Sprintf("未知 kind=%q（只允许 software / runtime / conda_env / path）", d.Kind))
 		}
 		if d.Action == "" {
 			add("缺少 action")

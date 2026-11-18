@@ -95,6 +95,33 @@ func TestWriteProducesBothFiles(t *testing.T) {
 	}
 }
 
+func TestUnverifiedStepIsNotSucceeded(t *testing.T) {
+	p := &plan.Plan{
+		App: "envlift", Kind: "restore-plan", Schema: config.CurrentSchema,
+		Target: plan.Target{OS: "Windows 11", Arch: "amd64", Username: "${USER}", Hostname: "${HOST}"},
+		Items: []plan.Item{{
+			TargetID: "c1", Kind: plan.KindCondaEnv, Name: "py311",
+			Tier: plan.TierConda, Status: plan.StatusPlanned,
+			Command: "conda env update", VerifyCmd: "conda list --json",
+		}},
+	}
+	doc := Build(Input{
+		Plan:  p,
+		Apply: &apply.Result{Unverified: 1},
+		Steps: []apply.Step{{
+			Index: 0, Kind: plan.KindCondaEnv, Name: "py311", Tier: plan.TierConda,
+			Status: apply.StepUnverified, UnverifiedReason: "numpy（缺失）",
+		}},
+		Now: time.Now(),
+	}, time.Now())
+	if doc.Items[0].Status != "unverified" {
+		t.Fatalf("状态=%q，期望 unverified", doc.Items[0].Status)
+	}
+	if doc.Summary.Unverified != 1 || doc.Summary.Succeeded != 0 {
+		t.Fatalf("summary 不对: %+v", doc.Summary)
+	}
+}
+
 func TestApplyModeRecordsSteps(t *testing.T) {
 	dir := t.TempDir()
 	p := samplePlan()

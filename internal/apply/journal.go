@@ -32,6 +32,8 @@ type Step struct {
 	// 原始输出记在 VersionRaw 里，报告据此标 version_unparsed（C2）。
 	ActualVersion string `json:"actual_version,omitempty"`
 	VersionRaw    string `json:"version_raw,omitempty"`
+	// UnverifiedReason 记录命令成功但清单校验未通过的原因（conda 缺包等）。
+	UnverifiedReason string `json:"unverified_reason,omitempty"`
 }
 
 // 步骤状态。
@@ -40,6 +42,8 @@ const (
 	StepFailed  = "failed"
 	StepSkipped = "skipped"
 	StepBlocked = "blocked"
+	// StepUnverified 表示命令执行成功，但事后校验发现缺包/版本不符。
+	StepUnverified = "unverified"
 )
 
 // Journal 是 apply 的事务日志（C2）。

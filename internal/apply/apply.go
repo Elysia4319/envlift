@@ -8,9 +8,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/Elysia4319/envlift/internal/conda"
+	"github.com/Elysia4319/envlift/internal/config"
 	"github.com/Elysia4319/envlift/internal/pathenv"
 	"github.com/Elysia4319/envlift/internal/pathmgmt"
 	"github.com/Elysia4319/envlift/internal/plan"
@@ -54,7 +57,9 @@ type Result struct {
 	Executed int `json:"executed"`
 	Skipped  int `json:"skipped"`
 	Failed   int `json:"failed"`
-	Blocked  int `json:"blocked"`
+	// Unverified 表示命令执行成功但包清单校验发现缺包/版本不符。
+	Unverified int `json:"unverified"`
+	Blocked    int `json:"blocked"`
 	// Undecided 是「因未决策被跳过」的条目数（C2：不阻断、不算失败）。
 	Undecided int      `json:"undecided"`
 	PathAdded int      `json:"path_added"`
@@ -194,6 +199,15 @@ func Run(opts Options) (*Result, error) {
 				res.Skipped++
 				continue
 			}
+		}
+
+		// conda_env 不走通用命令执行：需要写临时 environment.yml / .condarc /
+		// pip.ini，并通过环境变量注入；命令之间也不能用 shell 的 &&。
+		if it.Kind == plan.KindCondaEnv {
+			if stop := runCondaItem(opts, res, i, it, started); stop {
+				return res, nil
+			}
+			continue
 		}
 
 		// 账本命中即跳过：账本记录的是同一 target_id + 归一化目录的已完成
@@ -359,6 +373,200 @@ func Run(opts Options) (*Result, error) {
 
 	_ = opts.Journal.Finish("")
 	return res, nil
+}
+
+// runCondaItem 执行一条 conda_env 计划项，返回是否应停止整批。
+func runCondaItem(opts Options, res *Result, index int, it plan.Item, started string) bool {
+	spec := it.Conda
+	step := Step{
+		Index: index, Kind: it.Kind, Name: it.Name, Tier: plan.TierConda,
+		Command: it.Command, StartedAt: started,
+	}
+	if spec == nil {
+		step.Status = StepFailed
+		step.Output = "缺少 conda 执行参数"
+		step.FinishedAt = opts.Now().Format(time.RFC3339)
+		_ = opts.Journal.Append(step)
+		res.Failed++
+		res.Stopped = fmt.Sprintf("条目 %s 缺少 conda 执行参数，已停止", it.Name)
+		_ = opts.Journal.Finish(res.Stopped)
+		return true
+	}
+
+	work := spec.WorkDir
+	if strings.TrimSpace(work) == "" {
+		work = filepath.Join(filepath.Dir(opts.Journal.Path()), "conda", sanitizePathSegment(spec.Name))
+	}
+	spec.WorkDir = work
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		return failConda(opts, res, step, "创建 conda 临时目录失败: "+err.Error(), it.Name)
+	}
+
+	envVars := []string{"PIP_DISABLE_PIP_VERSION_CHECK=1"}
+	envFile := filepath.Join(work, "environment.yml")
+	reqFile := filepath.Join(work, "requirements.txt")
+	condarc := filepath.Join(work, "condarc")
+	pipIni := filepath.Join(work, "pip.ini")
+
+	if spec.RestoreConda {
+		data, err := conda.EnvironmentYAML(configForConda(spec), spec.Profile)
+		if err != nil {
+			return failConda(opts, res, step, "生成 environment.yml 失败: "+err.Error(), it.Name)
+		}
+		if err := os.WriteFile(envFile, data, 0o600); err != nil {
+			return failConda(opts, res, step, "写 environment.yml 失败: "+err.Error(), it.Name)
+		}
+		if b := conda.Condarc(spec.Profile); len(b) > 0 {
+			if err := os.WriteFile(condarc, b, 0o600); err != nil {
+				return failConda(opts, res, step, "写临时 CONDARC 失败: "+err.Error(), it.Name)
+			}
+			envVars = append(envVars, "CONDARC="+condarc)
+		}
+	}
+	if spec.RestorePip {
+		if err := os.WriteFile(reqFile, conda.RequirementsTXT(configForConda(spec)), 0o600); err != nil {
+			return failConda(opts, res, step, "写 requirements.txt 失败: "+err.Error(), it.Name)
+		}
+		if b := conda.PipConfig(spec.Profile); len(b) > 0 {
+			if err := os.WriteFile(pipIni, b, 0o600); err != nil {
+				return failConda(opts, res, step, "写临时 PIP_CONFIG_FILE 失败: "+err.Error(), it.Name)
+			}
+			envVars = append(envVars, "PIP_CONFIG_FILE="+pipIni)
+		}
+	}
+
+	fmt.Fprintf(opts.Out, "  [执行] %s —— %s\n", it.Name, step.Command)
+	var outputs []string
+	for _, cmd := range plan.CondaCommands(spec) {
+		rr := runWithEnv(opts.Exec, context.Background(), cmd, opts.Timeout, envVars)
+		outputs = append(outputs, fmt.Sprintf("$ %s\n%s", cmd, strings.TrimSpace(rr.Output)))
+		if rr.ExitCode != 0 || rr.Err != nil {
+			step.Status = StepFailed
+			step.ExitCode = rr.ExitCode
+			step.Output = truncate(strings.Join(outputs, "\n---\n"), 4000)
+			step.Output = truncate(step.Output+"\n环境不会自动删除；如需清理请手工运行: conda env remove --prefix \""+
+				spec.Prefix+"\"", 4000)
+			step.FinishedAt = opts.Now().Format(time.RFC3339)
+			_ = opts.Journal.Append(step)
+			res.Failed++
+			res.Stopped = fmt.Sprintf("条目 %s 执行失败（退出码 %d），已停止并保留环境", it.Name, rr.ExitCode)
+			res.Warnings = append(res.Warnings, fmt.Sprintf("conda 临时文件保留在 %s，排查后可手工删除", work))
+			fmt.Fprintf(opts.Out, "  [失败] %s —— 环境已保留，按 journal 手工清理\n", it.Name)
+			_ = opts.Journal.Finish(res.Stopped)
+			return true
+		}
+	}
+	step.Output = truncate(strings.Join(outputs, "\n---\n"), 4000)
+
+	// 校验：缺包/版本不符时只能标 unverified，不能报成功。
+	var reasons []string
+	if spec.RestoreConda {
+		got, err := condaVerifyList(opts, spec)
+		if err != nil {
+			reasons = append(reasons, "conda list 校验失败: "+err.Error())
+		} else if missing := conda.CompareConda(spec.Packages, got); len(missing) > 0 {
+			reasons = append(reasons, "conda 包不完整: "+strings.Join(missing, "; "))
+		}
+	}
+	if spec.RestorePip {
+		got, err := pipVerifyList(opts, spec)
+		if err != nil {
+			reasons = append(reasons, "pip list 校验失败: "+err.Error())
+		} else if missing := conda.ComparePip(spec.PipPackages, got); len(missing) > 0 {
+			reasons = append(reasons, "pip 包不完整: "+strings.Join(missing, "; "))
+		}
+	}
+	step.FinishedAt = opts.Now().Format(time.RFC3339)
+	if len(reasons) > 0 {
+		step.Status = StepUnverified
+		step.UnverifiedReason = strings.Join(reasons, "；")
+		step.Output = truncate(step.Output+"\n--- 校验失败 ---\n"+step.UnverifiedReason, 4000)
+		res.Unverified++
+		fmt.Fprintf(opts.Out, "  [未验证] %s —— %s\n", it.Name, step.UnverifiedReason)
+		res.Warnings = append(res.Warnings, fmt.Sprintf("conda 临时文件保留在 %s，排查后可手工删除", work))
+	} else {
+		step.Status = StepOK
+		res.Executed++
+		fmt.Fprintf(opts.Out, "  [完成] %s —— 包清单校验通过\n", it.Name)
+		_ = os.RemoveAll(work)
+	}
+	_ = opts.Journal.Append(step)
+	return false
+}
+
+func failConda(opts Options, res *Result, step Step, msg, name string) bool {
+	step.Status = StepFailed
+	step.Output = msg
+	step.FinishedAt = opts.Now().Format(time.RFC3339)
+	_ = opts.Journal.Append(step)
+	res.Failed++
+	res.Stopped = fmt.Sprintf("条目 %s 准备 conda 临时文件失败，已停止", name)
+	_ = opts.Journal.Finish(res.Stopped)
+	return true
+}
+
+func runWithEnv(exec Executor, ctx context.Context, command string, timeout time.Duration, env []string) ExecResult {
+	if ee, ok := exec.(EnvExecutor); ok {
+		return ee.RunWithEnv(ctx, command, timeout, env)
+	}
+	return exec.Run(ctx, command, timeout)
+}
+
+func condaVerifyList(opts Options, spec *plan.CondaSpec) ([]config.CondaPackage, error) {
+	cmd := quoteCondaPath(planCondaExe(spec)) + " list --json --prefix " + quoteCondaPath(spec.Prefix)
+	rr := opts.Exec.Run(context.Background(), cmd, 60*time.Second)
+	if rr.ExitCode != 0 || rr.Err != nil {
+		return nil, fmt.Errorf("conda list 失败: %s", truncate(rr.Output, 300))
+	}
+	return conda.ParseCondaList([]byte(rr.Output))
+}
+
+func pipVerifyList(opts Options, spec *plan.CondaSpec) ([]config.PipPackage, error) {
+	cmd := quoteCondaPath(filepath.Join(spec.Prefix, "python.exe")) + " -m pip list --format=json"
+	rr := opts.Exec.Run(context.Background(), cmd, 60*time.Second)
+	if rr.ExitCode != 0 || rr.Err != nil {
+		return nil, fmt.Errorf("pip list 失败: %s", truncate(rr.Output, 300))
+	}
+	return conda.ParsePipList([]byte(rr.Output))
+}
+
+func planCondaExe(spec *plan.CondaSpec) string {
+	if strings.TrimSpace(spec.CondaExe) != "" {
+		return spec.CondaExe
+	}
+	return "conda"
+}
+
+func quoteCondaPath(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" || strings.ContainsAny(s, " \t") {
+		return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
+	}
+	return s
+}
+
+func configForConda(spec *plan.CondaSpec) config.CondaEnv {
+	enabled := true
+	return config.CondaEnv{
+		Name: spec.Name, Prefix: spec.Prefix, Manager: spec.Manager,
+		CondaExe: spec.CondaExe, PythonVersion: spec.PythonVersion,
+		Mirror: spec.Mirror, RestoreConda: &enabled, RestorePip: &spec.RestorePip,
+		Packages: spec.Packages, PipPackages: spec.PipPackages,
+	}
+}
+
+func sanitizePathSegment(s string) string {
+	s = strings.Map(func(r rune) rune {
+		switch r {
+		case '\\', '/', ':', '*', '?', '"', '<', '>', '|':
+			return '_'
+		}
+		return r
+	}, strings.TrimSpace(s))
+	if s == "" {
+		return "env"
+	}
+	return s
 }
 
 // recheckLedgerInstallDir 在按账本跳过前复核当前 InstallLocation。

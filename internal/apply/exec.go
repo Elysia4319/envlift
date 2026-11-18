@@ -3,6 +3,7 @@ package apply
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"syscall"
@@ -24,6 +25,15 @@ type Executor interface {
 	Run(ctx context.Context, command string, timeout time.Duration) ExecResult
 }
 
+// EnvExecutor 是可注入环境变量的执行器。
+//
+// 用可选接口而不是直接扩 Executor：现有大量测试替身只实现 Run，扩接口会让
+// 它们全部编译失败；真实执行器实现 EnvExecutor，conda 临时 CONDARC/PIP_CONFIG_FILE
+// 通过它注入。
+type EnvExecutor interface {
+	RunWithEnv(ctx context.Context, command string, timeout time.Duration, env []string) ExecResult
+}
+
 // CommandExecutor 是真实实现。
 type CommandExecutor struct{}
 
@@ -31,6 +41,15 @@ type CommandExecutor struct{}
 func NewExecutor() Executor { return CommandExecutor{} }
 
 func (CommandExecutor) Run(ctx context.Context, command string, timeout time.Duration) ExecResult {
+	return runCommand(ctx, command, timeout, nil)
+}
+
+// RunWithEnv 在继承当前进程环境的基础上追加 env。
+func (CommandExecutor) RunWithEnv(ctx context.Context, command string, timeout time.Duration, env []string) ExecResult {
+	return runCommand(ctx, command, timeout, env)
+}
+
+func runCommand(ctx context.Context, command string, timeout time.Duration, env []string) ExecResult {
 	argv, err := SplitCommand(command)
 	if err != nil || len(argv) == 0 {
 		return ExecResult{ExitCode: -1, Err: fmt.Errorf("命令无法解析: %q", command)}
@@ -41,6 +60,9 @@ func (CommandExecutor) Run(ctx context.Context, command string, timeout time.Dur
 
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	out, runErr := cmd.CombinedOutput()
 
 	res := ExecResult{Output: string(out)}
