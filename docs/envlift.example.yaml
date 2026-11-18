@@ -81,7 +81,7 @@ software:
     silent_capable: false
     manual_hint: '需厂商账号登录后安装'
 
-# conda 环境快照。base 默认只读；命名环境可按需恢复 conda 包与 pip 包。
+# conda 环境快照。base 默认只读；命名环境默认不恢复，示例里显式打开两个开关。
 conda_envs:
   - name: py311
     prefix: 'C:\Users\${USER}\miniconda3\envs\py311'

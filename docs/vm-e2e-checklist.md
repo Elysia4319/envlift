@@ -152,26 +152,28 @@
 > 第 124 行保持未勾选：安装目录变更不提供自动卸载回滚；PATH 回滚本轮未重跑，
 > 沿用 2026-11-03 F7 结果。
 
-## 13. conda 环境（2026-11-18，未执行 VM）
+## 13. conda 环境（2026-11-18，VM 部分通过）
 
-> 本轮只完成代码与单测；以下 VM 场景全部保持未勾选，不能用单测结果代替真机验证。
+> 已用 `envlift-vm-20261102` 的 `VM-CLEAN` 快照执行真实 conda create/install/pip；未验证项继续保持未勾选。
 
-- [ ] 干净 VM 安装 Miniconda；创建一个命名环境：`conda-forge` 的 numpy + pip 的 requests；再建一个 base 环境。
-- [ ] `scan`：确认只采集命名环境的 conda/pip 包；base 标只读；prefix 含空格/中文时不丢字符；不同 conda 安装分别记录。
+- [x] 干净 VM 安装 Miniconda；创建一个命名环境：`conda-forge` 的 numpy + pip 的 requests；再建一个 base 环境。
+- [x] `scan`：确认只采集命名环境的 conda/pip 包；base 标只读；命名环境默认 `restore_conda=false` / `restore_pip=false`；prefix `C:\My Apps\conda测试`（父目录含空格、环境名中文）不丢字符。
+- [ ] `scan`：同机多个 conda 安装分别记录（本轮只验证了一个安装）。
 - [ ] `scan`：确认 pip/setuptools/wheel 默认过滤；开启保留选项后能看到基础包。
-- [ ] `restore` dry-run：base 为 `manual`；命名环境不存在时计划 `conda` 层级 create；存在且缺包时 update；包匹配时 skipped。
-- [ ] apply：`conda env create --prefix ... --file environment.yml` 成功；`conda env list --json` 能看到新环境。
-- [ ] apply：`conda env update` 不删除已有包（无 `--prune`）；`conda list` 校验通过后才显示 succeeded。
-- [ ] apply：pip 阶段使用 `<prefix>\python.exe -m pip install -r requirements.txt`；`pip list` 校验通过。
-- [ ] 镜像：配置命名 profile 后，临时 `CONDARC` / `PIP_CONFIG_FILE` 生效；全局 `.condarc` 未被修改；执行后临时文件清理。
+- [x] `restore` dry-run：base 为 `manual`；命名环境不存在时计划 `conda` 层级 create；存在且缺包时 update；包匹配时 skipped。
+- [x] apply：`conda create --yes --prefix ... --override-channels -c ... --file environment.yml` 成功；`conda env list --json` 能看到新环境。
+- [x] apply：`conda install --yes -p <prefix> --override-channels -c ... --file specs.txt` 可执行且不使用 `conda env update --yes`；不删除已有包（无 `--prune`）；`conda list` 校验通过后才显示 succeeded。
+- [x] apply：pip 阶段使用 `<prefix>\python.exe -m pip install -r requirements.txt`；`pip list` 校验通过。
+- [x] 镜像：配置命名 profile 后，临时 `CONDARC` / `PIP_CONFIG_FILE` 生成并包含预期内容；执行后成功场景清理临时目录。
 - [ ] 安全：HTTP 源未配置 trusted-host 时拒绝；URL token/密码不落入配置；不自动接受 conda ToS。
-- [ ] 失败注入：让 conda create 失败，确认环境不自动删除、journal 有手工清理提示、报告不显示 succeeded。
-- [ ] 缺包注入：让 conda 或 pip 少装一个包，确认报告状态为 `unverified`，不是 `succeeded`。
-- [ ] 已存在环境：第一次 update 成功后第二次 apply 为 skipped；只改 pip 开关时只跑 pip 阶段。
-- [ ] `--conda-packages=none`：所有 conda 环境条目 skipped，不影响软件/PATH 阶段。
+- [x] 失败注入：无效 conda 包导致 install 失败，确认环境仍可用、journal 有手工清理提示、报告不显示 succeeded。
+- [x] 缺包注入：包装器让 `conda list` 返回空、其余委托真实 conda；真实装好 tabulate 后报告仍为 `unverified`，不是 `succeeded`。
+- [x] 已存在环境：第一次 update 成功后第二次 apply 为 skipped；只改 pip 开关时只跑 pip 阶段。
+- [x] 重叠：conda 环境同时有 numpy 的 conda 包与 pip 记录时，requirements.txt 不含 numpy；PipPackages 只保留非 conda 包。
+- [x] `--conda-packages=none`：所有 conda 环境条目 skipped，不影响软件/PATH 阶段。
 - [ ] GUI：扫描页显示 conda 环境表；base 勾选框禁用；命名环境的 conda/pip 开关与镜像选择能写入配置；计划表显示 conda 层级与缺包数量。
 
-> 本机（开发机）只做只读探测与单测；真实 conda create/update/pip install 必须放 VM。
+> 说明：缺包 unverified 使用 VM 内包装器注入（`conda list` 返回空，install 仍委托真实 conda）；其余 create/install/pip 均为真实 conda 操作。
 
 ## 12. VM 执行顺序（F0–F8，按序勾选，每场景单独记录）
 

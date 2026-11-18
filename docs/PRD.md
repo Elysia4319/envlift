@@ -54,7 +54,7 @@ envlift help
 | `restore --yes` | 关闭 | 跳过**无需提权**的确认。**绝不静默批准提权** |
 | `restore --plan-out` | 关闭 | 把计划写成 JSON（显式要求才落盘，dry-run 默认零写入） |
 | `restore --installers` | `./installers` | 本地安装包目录 |
-| `restore --conda-packages` | `both` | conda 环境恢复范围：只恢复 conda 包、只恢复 pip 包、两者或都不恢复 |
+| `restore --conda-packages` | `none` | conda 环境恢复范围：只恢复 conda 包、只恢复 pip 包、两者或都不恢复。默认不恢复，必须显式选择 |
 | `restore --decisions` | 配置同目录的 `envlift.decisions.yaml`（存在则加载） | 决策文件；显式指定但读不到 → 直接报错，不当成「没有决策」 |
 | `restore --from-user` | 空 | `--raw` 配置中的原用户名，显式要求才重写 |
 | `restore --from-host` | 空 | `--raw` 配置中的原主机名 |
@@ -250,13 +250,13 @@ installers:
 | `conda_version` | string | 否 | `conda info --json` 的版本 |
 | `python_version` | string | 否 | conda 包列表中 `python` 的版本 |
 | `base` | bool | 否 | 是否 base 环境 |
-| `restore_conda` | bool | 否 | 是否恢复 conda 包；缺省 true（base 除外） |
-| `restore_pip` | bool | 否 | 是否恢复 pip 包；缺省 true（base 除外） |
+| `restore_conda` | bool | 否 | 是否恢复 conda 包；缺省 false，必须显式开启 |
+| `restore_pip` | bool | 否 | 是否恢复 pip 包；缺省 false，必须显式开启 |
 | `mirror` | string | 否 | 引用 `mirrors` 的 profile 名；空表示默认源 |
 | `packages` | []object | 否 | `{name, version, build, channel}`；channel URL 中的凭据会被脱敏 |
 | `pip_packages` | []object | 否 | `{name, version}`；默认过滤 pip / setuptools / wheel / distribute |
 
-`mirrors` 的键是 profile 名，值支持 `conda_channels`、`pip_index_url`、`pip_extra_index_url`、`pip_trusted_host`。envlift **不硬编码**任何公共镜像；profile 由用户显式配置。URL 中出现 userinfo 或敏感查询参数（token / password / key 等）时拒绝保存；默认只允许 HTTPS，HTTP 必须显式加入 `pip_trusted_host`。
+`mirrors` 的键是 profile 名，值支持 `conda_channels`、`pip_index_url`、`pip_extra_index_url`、`pip_trusted_host`。envlift **不硬编码**任何公共镜像；profile 由用户显式配置。envlift 也不会自动读取或迁移源机器的 `~/.condarc` / pip 配置，不会自动采集 `channel_alias` / `default_channels`。URL 中出现 userinfo 或敏感查询参数（token / password / key 等）时拒绝保存；默认只允许 HTTPS，HTTP 必须显式加入 `pip_trusted_host`。
 
 ---
 
@@ -318,16 +318,18 @@ installers:
 
 conda 环境使用独立层级 `conda`，不复用 local/winget：
 
+默认 `--conda-packages=none`，所有 conda 环境条目跳过；GUI 的 conda/pip 复选框默认不勾选。只有显式选择范围并开启对应开关才执行。
+
 | 条件 | 状态 |
 |---|---|
 | `base=true` | `manual`，只读，不自动修改 |
 | 配置里同名环境多于一个 | `needs-disambiguation`，不自动执行 |
-| 目标机不存在 | `planned`，执行 `conda env create --prefix ... --file environment.yml` |
-| 目标机存在且有缺包 | `planned`，执行 `conda env update --prefix ... --file ...`（不用 `--prune`） |
+| 目标机不存在 | `planned`，执行 `conda create --yes --prefix ... --override-channels -c ... --file environment.yml` |
+| 目标机存在且有缺包 | `planned`，执行 `conda install --yes --prefix ... --override-channels -c ... --file specs.txt`（不用 `--prune`，不自动接受 ToS） |
 | conda/pip 包都已匹配 | `skipped` |
 | 只启用 pip 且环境不存在 | `manual`，因为不能只靠 pip 创建环境 |
 
-恢复 conda 包时生成 `environment.yml`；恢复 pip 包时生成 `requirements.txt`。临时 `CONDARC` 与 `PIP_CONFIG_FILE` 放在 `reports/conda/<环境名>/` 下，成功后清理；失败或未验证时保留并写 warning。executor 通过环境变量注入临时配置，**不修改全局 `.condarc` / pip 配置**。
+恢复 conda 包时生成 `environment.yml` 与 `specs.txt`；恢复 pip 包时生成 `requirements.txt`。临时 `environment.yml` / `specs.txt` / `CONDARC` / `PIP_CONFIG_FILE` 放在 `reports/conda/<环境名>/` 下，成功后清理；失败或未验证时保留并写 warning。executor 通过环境变量注入临时配置，**不修改全局 `.condarc` / pip 配置**。
 
 执行后用 `conda list --json --prefix ...` 与 `<prefix>\python.exe -m pip list --format=json` 校验。缺包或版本/build 不符时状态为 `unverified`，不能报 `succeeded`。失败不自动删除环境；journal 记录手工清理命令。
 
@@ -695,5 +697,5 @@ apply 开始时**重新探测** winget 可用性与网络状态；与 dry-run �
 
 自动化验证脚本在 `scripts/ui-check/`（Playwright 驱动系统已装的 Edge/Chrome）：三页冒烟、轮询增量（假 API）、三档宽度布局自检。
 
-**conda 面板**：扫描结果新增 conda 环境表，显示环境名、Python 版本、前缀、conda/pip 包数量、两个恢复开关与镜像选择。base 行只读；命名环境可分别关闭 conda/pip。提交扫描时，GUI 只回传开关与 mirror 名，不回传路径或包列表；服务端按 `name + manager` 匹配，匹配不到直接报错。
+**conda 面板**：扫描结果新增 conda 环境表，显示环境名、Python 版本、前缀、conda/pip 包数量、两个恢复开关与镜像选择。base 行只读；命名环境的 conda/pip 默认都不勾选，必须显式开启。提交扫描时，GUI 只回传开关与 mirror 名，不回传路径或包列表；服务端按 `name + manager` 匹配，匹配不到直接报错。
 

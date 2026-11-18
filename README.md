@@ -56,7 +56,7 @@ go install github.com/Elysia4319/envlift/cmd/envlift@latest
 # 真实执行；需要输入大写的 APPLY 二次确认
 .\envlift.exe restore --config envlift.yaml --apply
 
-# 只恢复 conda 包，或只恢复 pip 包
+# 默认不恢复 conda/pip 包；必须显式选择范围
 .\envlift.exe restore --config envlift.yaml --apply --conda-packages=conda
 .\envlift.exe restore --config envlift.yaml --apply --conda-packages=pip
 
@@ -79,18 +79,19 @@ go install github.com/Elysia4319/envlift/cmd/envlift@latest
 
 ## conda 环境
 
-`scan` 会读取本机可发现的 conda 安装，采集命名环境的 conda 包（name / version / build / channel）与 pip 包（name / version）。默认过滤 pip / setuptools / wheel 等基础包；GUI 或 `--keep-pip-bootstrap` 可保留。base 默认只读，不进入自动恢复列表；GUI 的扫描结果里可以逐个环境开关 conda / pip，并选择命名镜像 profile。
+`scan` 会读取本机可发现的 conda 安装，采集命名环境的 conda 包（name / version / build / channel）与 pip 包（name / version）。默认过滤 pip / setuptools / wheel 等基础包；GUI 或 `--keep-pip-bootstrap` 可保留。base 默认只读，不进入自动恢复列表；所有环境默认 `restore_conda=false`、`restore_pip=false`，必须在 GUI 勾选或显式传 `--conda-packages` 才会执行。GUI 的扫描结果里可以逐个环境开关 conda / pip，并选择命名镜像 profile。
 
 `restore` 对 conda 环境使用独立层级 `conda`：
 
-- 环境不存在时生成 `environment.yml` 并执行 `conda env create --prefix ...`。
-- 环境已存在时执行 `conda env update --prefix ... --file ...`，不使用 `--prune`。
+- 环境不存在时生成 `environment.yml`，执行 `conda create --yes --prefix ... --override-channels -c ... --file environment.yml`。
+- 环境已存在时生成 `specs.txt`，执行 `conda install --yes --prefix ... --override-channels -c ... --file specs.txt`；不使用不支持 `--yes` 的 `conda env update`，也不自动接受 conda ToS。
 - pip 包单独执行 `<prefix>\python.exe -m pip install -r requirements.txt`。
-- 临时 `environment.yml`、`CONDARC`、`PIP_CONFIG_FILE` 放在 `reports/conda/` 下，成功后清理；失败或未验证时保留，便于排查。
+- 临时 `environment.yml`、`specs.txt`、`CONDARC`、`PIP_CONFIG_FILE` 放在 `reports/conda/` 下，成功后清理；失败或未验证时保留，便于排查。
 - 执行后用 `conda list` / `pip list` 校验；缺包或版本不符只标 `unverified`，不报 `succeeded`。
 - 失败不会自动删除环境；journal 会给出 `conda env remove --prefix ...` 的手工清理提示。
+- conda 安装的包会同时出现在 `pip list` 中；扫描会按 PEP 503 规范化名称剔除重叠，避免 `requirements.txt` 重复安装 numpy 等 conda 包。
 
-镜像只使用配置里的命名 profile，不硬编码默认清华源。URL 中的 token / 密码不会被写入配置；带凭据的 URL 会被拒绝。默认只允许 HTTPS；HTTP 或 pip 的 `trusted-host` 必须显式配置。
+镜像只使用配置里的命名 profile，不硬编码默认清华源；envlift **不会自动读取或迁移**源机器的 `~/.condarc` / pip 配置，也不会自动采集 channel_alias/default_channels。URL 中的 token / 密码不会被写入配置；带凭据的 URL 会被拒绝。默认只允许 HTTPS；HTTP 或 pip 的 `trusted-host` 必须显式配置。
 
 ## 安全边界
 

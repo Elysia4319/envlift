@@ -397,9 +397,9 @@ token → 请求体结构 → `mode` → 加载配置并生成计划 → `admin_
 
 1. schema 升到 v2，新增 `conda_envs[]` 与 `mirrors{}`；v1 配置可读并备份后迁移，v2 旧二进制按 D9 拒绝。
 2. 新增 `internal/conda` 包，conda/pip 命令、文件系统与发现路径全部接口化；单测不调用真实 conda。
-3. 扫描只采集命名环境；base 记录但默认 `restore_conda=false`、`restore_pip=false`。同机多个 conda 安装分别记录，同名环境在 plan 阶段标 `needs-disambiguation`。
-4. conda 包与 pip 包分两阶段恢复：conda 先 `environment.yml`，pip 后 `requirements.txt`；`--conda-packages=conda|pip|both|none` 控制范围，GUI 每个环境另有独立开关。
-5. conda 使用独立层级 `conda`，不复用 local/winget；`base` 为 manual/只读。环境不存在用 create，存在且有缺包用 update，不用 `--prune`；包匹配才 skipped。
+3. 扫描只采集命名环境；所有环境（含 base）默认 `restore_conda=false`、`restore_pip=false`，必须显式开启。同机多个 conda 安装分别记录，同名不同 prefix 在 plan 阶段标 `needs-disambiguation`，不按名称复用。
+4. conda 包与 pip 包分两阶段恢复：conda 先 `environment.yml`，pip 后 `requirements.txt`；`--conda-packages=conda|pip|both|none` 控制范围，默认 `none`，GUI 每个环境另有独立开关。conda 包与 pip 包按 PEP 503 规范化名称去重，避免 requirements.txt 重复安装 conda 包。
+5. conda 使用独立层级 `conda`，不复用 local/winget；`base` 为 manual/只读。环境不存在用 `conda create --file environment.yml`，存在且有缺包用 `conda install --file specs.txt`；两者都显式 `--override-channels -c ...`，不自动接受 ToS，不用 `--prune`；包匹配才 skipped。
 6. 临时 `CONDARC` / `PIP_CONFIG_FILE` 放在 `reports/conda/<环境名>/`，通过 Executor 的环境变量注入，执行后清理；不修改全局 `.condarc` 或 pip 配置。
 7. 镜像只做命名 profile，不硬编码公共源；URL 中的 userinfo / token / password 拒绝保存或脱敏。默认 HTTPS，HTTP 必须显式 `trusted-host`。不自动接受 conda ToS，不从 HTTP/Git 静默安装，不自动 trusted-host。
 8. 执行后必须用 `conda list` / `pip list` 校验；缺包或版本/build 不符标 `unverified`，不能报 `succeeded`。失败不自动删除环境，journal 给出手工清理提示。
