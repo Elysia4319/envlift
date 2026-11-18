@@ -1,9 +1,9 @@
 {
   "report_schema": 1,
   "kind": "restore-report",
-  "generated_at": "2026-11-03T11:17:52+08:00",
-  "config_path": "conda-create.yaml",
-  "journal": "reports\\.envlift-journal-20261103-111717.json",
+  "generated_at": "2026-11-18T15:46:49+08:00",
+  "config_path": "conda-create-fixed.yaml",
+  "journal": "reports\\.envlift-journal-20261118-154547.json",
   "env": {
     "os": "Windows 11",
     "build": "26300",
@@ -14,7 +14,7 @@
     "network_ok": true,
     "elevated": true
   },
-  "plan_hash": "4c21de2c959fb3d5c673046444e5746fbb6a5dc1159e7e19d73ed1a45d159f26",
+  "plan_hash": "9b3b14ce824a01d49f8b8280a63bb04e47e48e9edcb68707cb96af30a7f98404",
   "mode": "apply",
   "summary": {
     "total": 1,
@@ -29,14 +29,14 @@
   },
   "items": [
     {
-      "target_id": "fdaf6b69acf0",
+      "target_id": "75913ca6703a",
       "kind": "conda_env",
-      "name": "conda-create测试",
+      "name": "conda-create2测试",
       "expected_version": "3.11.18",
-      "version_unparsed": true,
+      "actual_version": "3.11.18",
       "tier": "conda",
       "status": "succeeded",
-      "command": "C:\\Miniconda3\\Scripts\\conda.exe create --yes --prefix \"C:\\My Apps\\conda-create测试\" --override-channels -c conda-forge --file reports\\conda\\conda-create测试\\environment.yml \u0026\u0026 \"C:\\My Apps\\conda-create测试\\python.exe\" -m pip install --no-input --disable-pip-version-check -r reports\\conda\\conda-create测试\\requirements.txt",
+      "command": "C:\\Miniconda3\\Scripts\\conda.exe create --yes --prefix \"C:\\My Apps\\conda-create2测试\" --override-channels -c conda-forge --file reports\\conda\\conda-create2测试\\environment.yml \u0026\u0026 \"C:\\My Apps\\conda-create2测试\\python.exe\" -m pip install --no-input --disable-pip-version-check -r reports\\conda\\conda-create2测试\\requirements.txt",
       "exit_code": 0,
       "verify_result": "pass",
       "needs_admin": false,

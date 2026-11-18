@@ -1,5 +1,5 @@
 envlift restore — 预演（未执行任何操作）
-配置 conda-explicit.yaml · schema v2 · 生成于 2026-11-18T15:17:14+08:00
+配置 conda-explicit.yaml · schema v2 · 生成于 2026-11-18T15:52:37+08:00
 
 环境预检
   目标机      Windows 11 (build 26300) / amd64
@@ -15,7 +15,7 @@ envlift restore — 预演（未执行任何操作）
       层级 跳过 · 本次未选择恢复 conda 包或 pip 包
 
 PATH 变更
-  备份落点 reports/path-backup-20261118-151714.json（执行时生成，另有同名 .reg）
+  备份落点 reports/path-backup-20261118-155237.json（执行时生成，另有同名 .reg）
   用户级
     （无）
   系统级

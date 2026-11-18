@@ -2,8 +2,8 @@
   "app": "envlift",
   "kind": "apply-journal",
   "schema": 2,
-  "started_at": "2026-11-03T11:18:11+08:00",
-  "config_path": "conda-create.yaml",
+  "started_at": "2026-11-18T15:47:16+08:00",
+  "config_path": "conda-create-fixed.yaml",
   "steps": [],
   "finished": true
 }

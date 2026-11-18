@@ -260,6 +260,8 @@ base 仍保存完整 conda/pip 包清单，用于跨机器对比与审计；它�
 
 `mirrors` 的键是 profile 名，值支持 `conda_channels`、`pip_index_url`、`pip_extra_index_url`、`pip_trusted_host`。envlift **不硬编码**任何公共镜像；profile 由用户显式配置。envlift 也不会自动读取或迁移源机器的 `~/.condarc` / pip 配置，不会自动采集 `channel_alias` / `default_channels`。URL 中出现 userinfo 或敏感查询参数（token / password / key 等）时拒绝保存；默认只允许 HTTPS，HTTP 必须显式加入 `pip_trusted_host`。
 
+`CondaChannels` 只传递配置里的 channel 名或完整 URL，不展开自定义 `channel_alias`；依赖自定义 alias 的环境需在目标机保留 conda 配置，或把 channel 写成完整 URL。
+
 ---
 
 ## 4. 扫描流程（只读边界）
@@ -335,7 +337,7 @@ conda 环境使用独立层级 `conda`，不复用 local/winget：
 
 执行后用 `conda list --json --prefix ...` 与 `<prefix>\python.exe -m pip list --format=json` 校验。缺包或版本/build 不符时状态为 `unverified`，不能报 `succeeded`。失败不自动删除环境；journal 记录手工清理命令。
 
-`conda create --file` / `conda install --file` / `--override-channels` 要求 conda 4.6+；本轮只在 26.9.3 验证。旧版 conda 未验证，不自动回退到 `conda env create/update`，因为后者会重新引入默认频道 ToS 与 `env update --yes` 兼容问题。
+`conda create --file` / `conda install --file` / `--override-channels` **只验证 conda 26.9.3**；不声明旧版 conda 支持，旧版未验证，不自动回退到 `conda env create/update`，因为后者会重新引入默认频道 ToS 与 `env update --yes` 兼容问题。
 
 ### 5.3 断网与源不可用（D7）
 

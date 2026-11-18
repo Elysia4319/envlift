@@ -1,11 +1,11 @@
 envlift restore — 预演（未执行任何操作）
-配置 conda-fail-update.yaml · schema v2 · 生成于 2026-11-03T11:27:40+08:00
+配置 conda-fail-fixed.yaml · schema v2 · 生成于 2026-11-18T15:48:54+08:00
 
 环境预检
   目标机      Windows 11 (build 26300) / amd64
   用户        ${USER}@${HOST}
   权限        管理员运行
-  winget      可用 v1.11.510
+  winget      可用 v1.29.380
   网络        可达
   安装包      installers 下 0 个文件，命中 0 个配方 · 配方表 33 条
 
@@ -13,14 +13,14 @@ envlift restore — 预演（未执行任何操作）
    1. [conda_env] conda测试
       期望 3.11.18 / 当前 3.11.18
       层级 conda
-      命令 C:\Miniconda3\Scripts\conda.exe install --yes --prefix "C:\My Apps\conda测试" --override-channels -c conda-forge --file reports\conda\conda测试\specs.txt
+      命令 C:\Miniconda3\Scripts\conda.exe install --yes --prefix "C:\My Apps\conda测试" --override-channels -c conda-forge --file reports\conda\conda测试\specs.txt && "C:\My Apps\conda测试\python.exe" -m pip install --no-input --disable-pip-version-check -r reports\conda\conda测试\requirements.txt
       conda 包 2 / pip 包 0 · 缺 conda 1 / pip 0
-      校验 C:\Miniconda3\Scripts\conda.exe list --json --prefix "C:\My Apps\conda测试"
+      校验 C:\Miniconda3\Scripts\conda.exe list --json --prefix "C:\My Apps\conda测试" && "C:\My Apps\conda测试\python.exe" -m pip list --format=json
       降级 失败不删除环境；按 journal 记录手工清理
       说明 缺 1 个 conda 包 / 0 个 pip 包，将更新环境；conda 缺包：definitely-not-a-real-package-xyz（缺失）
 
 PATH 变更
-  备份落点 reports/path-backup-20261103-112740.json（执行时生成，另有同名 .reg）
+  备份落点 reports/path-backup-20261118-154854.json（执行时生成，另有同名 .reg）
   用户级
     （无）
   系统级
@@ -35,14 +35,14 @@ PATH 变更
 即将执行 1 项，其中 0 项需管理员运行，0 项将触发重启。
 PATH 变更 0 条。
 
-这是真实执行，会改动系统。确认请输入 APPLY（区分大小写）: 事务日志: reports\.envlift-journal-20261103-112740.json
+这是真实执行，会改动系统。确认请输入 APPLY（区分大小写）: 事务日志: reports\.envlift-journal-20261118-154854.json
 
-  [执行] conda测试 —— C:\Miniconda3\Scripts\conda.exe install --yes --prefix "C:\My Apps\conda测试" --override-channels -c conda-forge --file reports\conda\conda测试\specs.txt
+  [执行] conda测试 —— C:\Miniconda3\Scripts\conda.exe install --yes --prefix "C:\My Apps\conda测试" --override-channels -c conda-forge --file reports\conda\conda测试\specs.txt && "C:\My Apps\conda测试\python.exe" -m pip install --no-input --disable-pip-version-check -r reports\conda\conda测试\requirements.txt
   [失败] conda测试 —— 环境已保留，按 journal 手工清理
 
 执行完成: 成功 0 · 未验证 0 · 跳过 0 · 失败 1 · 阻止 0 · PATH 新增 0
 停止原因: 条目 conda测试 执行失败（退出码 1），已停止并保留环境
-回滚命令: envlift restore --rollback --journal "reports\.envlift-journal-20261103-112740.json"
-报告: reports\restore-20261103-112807.md
-      reports\restore-20261103-112807.json
+回滚命令: envlift restore --rollback --journal "reports\.envlift-journal-20261118-154854.json"
+报告: reports\restore-20261118-154906.md
+      reports\restore-20261118-154906.json
 EXIT1=1 
