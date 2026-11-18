@@ -88,7 +88,7 @@ software: []
 func TestSchemaTooNewRejected(t *testing.T) {
 	src := `
 app: envlift
-schema: 2
+schema: 3
 generated_at: '2026-10-27T10:05:00+08:00'
 source_machine: {os: {version: W, build: '1'}, arch: amd64, hostname: h, username: u}
 path: {user: [], machine: []}
@@ -97,7 +97,7 @@ software: []
 `
 	_, err := LoadBytes([]byte(src))
 	if !errors.Is(err, ErrSchemaTooNew) {
-		t.Errorf("schema=2 应返回 ErrSchemaTooNew，实际: %v", err)
+		t.Errorf("schema=3 应返回 ErrSchemaTooNew，实际: %v", err)
 	}
 }
 

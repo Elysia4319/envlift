@@ -6,6 +6,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 )
@@ -14,7 +15,7 @@ const (
 	// AppName 是配置文件 app 字段的固定值。
 	AppName = "envlift"
 	// CurrentSchema 是本程序支持的配置 schema 主版本。
-	CurrentSchema = 1
+	CurrentSchema = 2
 )
 
 // ErrSchemaTooNew 表示配置的 schema 版本高于本程序支持的版本。
@@ -28,16 +29,20 @@ var ErrSchemaTooNew = errors.New("配置 schema 版本高于本程序支持")
 // 结构编成 JSON 给前端，若只有 yaml 标签，JSON 键会退化成 Go 字段名（App/Schema），
 // 前端只能靠大小写猜——那是隐式的第二套命名约定，迟早出错。
 type Config struct {
-	App           string                 `yaml:"app" json:"app"`
-	Schema        int                    `yaml:"schema" json:"schema"`
-	GeneratedAt   string                 `yaml:"generated_at" json:"generated_at"`
-	SourceMachine SourceMachine          `yaml:"source_machine" json:"source_machine"`
-	DriveMap      map[string]DriveInfo   `yaml:"drive_map,omitempty" json:"drive_map,omitempty"`
-	Path          PathSection            `yaml:"path" json:"path"`
-	Runtimes      []Runtime              `yaml:"runtimes" json:"runtimes"`
-	Software      []Software             `yaml:"software" json:"software"`
-	Installers    []Installer            `yaml:"installers,omitempty" json:"installers,omitempty"`
-	Extra         map[string]interface{} `yaml:",inline" json:"-"`
+	App           string               `yaml:"app" json:"app"`
+	Schema        int                  `yaml:"schema" json:"schema"`
+	GeneratedAt   string               `yaml:"generated_at" json:"generated_at"`
+	SourceMachine SourceMachine        `yaml:"source_machine" json:"source_machine"`
+	DriveMap      map[string]DriveInfo `yaml:"drive_map,omitempty" json:"drive_map,omitempty"`
+	Path          PathSection          `yaml:"path" json:"path"`
+	Runtimes      []Runtime            `yaml:"runtimes" json:"runtimes"`
+	Software      []Software           `yaml:"software" json:"software"`
+	Installers    []Installer          `yaml:"installers,omitempty" json:"installers,omitempty"`
+	// CondaEnvs 是只读扫描得到的 conda 命名环境。base 默认只读，不参与自动恢复。
+	CondaEnvs []CondaEnv `yaml:"conda_envs,omitempty" json:"conda_envs,omitempty"`
+	// Mirrors 是命名镜像 profile；scan 不写入默认镜像，避免把某个公共源硬编码成事实。
+	Mirrors map[string]MirrorProfile `yaml:"mirrors,omitempty" json:"mirrors,omitempty"`
+	Extra   map[string]interface{}   `yaml:",inline" json:"-"`
 }
 
 // SourceMachine 记录来源机器的基本信息。hostname 与 username 默认已脱敏。
@@ -161,6 +166,61 @@ type Installer struct {
 	VerifiedAt       *string `yaml:"verified_at,omitempty" json:"verified_at,omitempty"`
 }
 
+// CondaEnv 是一个 conda 环境的只读快照。
+//
+// Manager / CondaExe 记录它来自哪个 conda 安装；同机多个 conda 安装时，
+// 同名环境也能看出各自的来源。Prefix 是扫描时的真实路径，导出时会被
+// ${USER}/${HOST} 脱敏。
+type CondaEnv struct {
+	Name          string `yaml:"name" json:"name"`
+	Prefix        string `yaml:"prefix" json:"prefix"`
+	Manager       string `yaml:"manager,omitempty" json:"manager,omitempty"`
+	CondaExe      string `yaml:"conda_exe,omitempty" json:"conda_exe,omitempty"`
+	CondaVersion  string `yaml:"conda_version,omitempty" json:"conda_version,omitempty"`
+	PythonVersion string `yaml:"python_version,omitempty" json:"python_version,omitempty"`
+	// Base 表示这是 conda 的 base 环境。默认不进入可恢复列表。
+	Base bool `yaml:"base,omitempty" json:"base,omitempty"`
+	// RestoreConda / RestorePip 是 GUI 侧开关；nil 表示按默认 true 处理。
+	RestoreConda *bool `yaml:"restore_conda,omitempty" json:"restore_conda,omitempty"`
+	RestorePip   *bool `yaml:"restore_pip,omitempty" json:"restore_pip,omitempty"`
+	// Mirror 引用 mirrors: 里的 profile 名；空表示直连默认源。
+	Mirror      string         `yaml:"mirror,omitempty" json:"mirror,omitempty"`
+	Packages    []CondaPackage `yaml:"packages,omitempty" json:"packages,omitempty"`
+	PipPackages []PipPackage   `yaml:"pip_packages,omitempty" json:"pip_packages,omitempty"`
+}
+
+// CondaEnabled 报告是否恢复 conda 包（缺省 true）。
+func (e CondaEnv) CondaEnabled() bool {
+	return e.RestoreConda == nil || *e.RestoreConda
+}
+
+// PipEnabled 报告是否恢复 pip 包（缺省 true）。
+func (e CondaEnv) PipEnabled() bool {
+	return e.RestorePip == nil || *e.RestorePip
+}
+
+// CondaPackage 是 conda list 的一条记录。
+type CondaPackage struct {
+	Name    string `yaml:"name" json:"name"`
+	Version string `yaml:"version" json:"version"`
+	Build   string `yaml:"build,omitempty" json:"build,omitempty"`
+	Channel string `yaml:"channel,omitempty" json:"channel,omitempty"`
+}
+
+// PipPackage 是 pip list 的一条记录。
+type PipPackage struct {
+	Name    string `yaml:"name" json:"name"`
+	Version string `yaml:"version" json:"version"`
+}
+
+// MirrorProfile 是命名镜像配置。只保存源地址，不保存任何凭据。
+type MirrorProfile struct {
+	CondaChannels  []string `yaml:"conda_channels,omitempty" json:"conda_channels,omitempty"`
+	PipIndexURL    string   `yaml:"pip_index_url,omitempty" json:"pip_index_url,omitempty"`
+	PipExtraIndex  []string `yaml:"pip_extra_index_url,omitempty" json:"pip_extra_index_url,omitempty"`
+	PipTrustedHost []string `yaml:"pip_trusted_host,omitempty" json:"pip_trusted_host,omitempty"`
+}
+
 // Verify 描述「如何判断该软件已经装好」，用于 restore 幂等判断（D13-P1/P3）。
 type Verify struct {
 	Command        string `yaml:"command" json:"command"`
@@ -224,7 +284,122 @@ func (c *Config) validate() error {
 				i, ins.Name)
 		}
 	}
+	for i, env := range c.CondaEnvs {
+		if strings.TrimSpace(env.Name) == "" {
+			return fmt.Errorf("conda_envs[%d].name 不能为空", i)
+		}
+		if strings.TrimSpace(env.Prefix) == "" {
+			return fmt.Errorf("conda_envs[%d](%s).prefix 不能为空", i, env.Name)
+		}
+		if env.Mirror != "" {
+			if _, ok := c.Mirrors[env.Mirror]; !ok {
+				return fmt.Errorf("conda_envs[%d](%s).mirror 引用了不存在的 profile %q",
+					i, env.Name, env.Mirror)
+			}
+		}
+		for j, p := range env.Packages {
+			if strings.TrimSpace(p.Name) == "" {
+				return fmt.Errorf("conda_envs[%d](%s).packages[%d].name 不能为空", i, env.Name, j)
+			}
+		}
+		for j, p := range env.PipPackages {
+			if strings.TrimSpace(p.Name) == "" {
+				return fmt.Errorf("conda_envs[%d](%s).pip_packages[%d].name 不能为空", i, env.Name, j)
+			}
+		}
+	}
+	for name, profile := range c.Mirrors {
+		if strings.TrimSpace(name) == "" {
+			return fmt.Errorf("mirrors 的 profile 名不能为空")
+		}
+		if err := validateMirrorProfile(profile); err != nil {
+			return fmt.Errorf("mirrors[%s] %s", name, err)
+		}
+	}
 	return nil
+}
+
+// validateMirrorProfile 拒绝把凭据写进配置文件，也拒绝静默走 HTTP。
+func validateMirrorProfile(p MirrorProfile) error {
+	for _, ch := range p.CondaChannels {
+		ch = strings.TrimSpace(ch)
+		if ch == "" {
+			return fmt.Errorf("conda_channels 不能包含空值")
+		}
+		if err := validateMirrorURL(ch, nil, false); err != nil {
+			return fmt.Errorf("conda channel %q: %w", ch, err)
+		}
+	}
+	if p.PipIndexURL != "" {
+		if err := validateMirrorURL(p.PipIndexURL, p.PipTrustedHost, true); err != nil {
+			return fmt.Errorf("pip_index_url: %w", err)
+		}
+	}
+	for _, u := range p.PipExtraIndex {
+		if err := validateMirrorURL(u, p.PipTrustedHost, true); err != nil {
+			return fmt.Errorf("pip_extra_index_url %q: %w", u, err)
+		}
+	}
+	return nil
+}
+
+// validateMirrorURL 检查协议、凭据与显式 trusted-host。
+//
+// 非 URL 的 conda channel 名（如 conda-forge / defaults）直接放行；
+// 任何带 userinfo 或敏感查询参数的 URL 都拒绝，避免把 token 写进 YAML。
+func validateMirrorURL(raw string, trustedHosts []string, allowHTTPWithTrust bool) error {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return fmt.Errorf("不能为空")
+	}
+	lower := strings.ToLower(raw)
+	if strings.HasPrefix(lower, "git+") {
+		return fmt.Errorf("不允许 git+ 源")
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" {
+		// conda channel 允许是命名 channel，不当 URL 处理。
+		return nil
+	}
+	if u.User != nil {
+		return fmt.Errorf("不允许在 URL 中保存用户名/密码/token")
+	}
+	for key := range u.Query() {
+		if sensitiveQueryKey(key) {
+			return fmt.Errorf("URL 查询参数 %q 看起来包含凭据，拒绝保存", key)
+		}
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "https":
+		return nil
+	case "http":
+		if allowHTTPWithTrust && trustedHost(u.Hostname(), trustedHosts) {
+			return nil
+		}
+		return fmt.Errorf("HTTP 源必须显式加入 pip_trusted_host；默认只允许 HTTPS")
+	case "file":
+		return nil
+	default:
+		return fmt.Errorf("不支持的协议 %q", u.Scheme)
+	}
+}
+
+func trustedHost(host string, list []string) bool {
+	for _, h := range list {
+		if strings.EqualFold(strings.TrimSpace(h), host) {
+			return true
+		}
+	}
+	return false
+}
+
+func sensitiveQueryKey(k string) bool {
+	k = strings.ToLower(strings.TrimSpace(k))
+	switch k {
+	case "token", "access_token", "auth", "apikey", "api_key", "key", "password", "passwd", "secret":
+		return true
+	}
+	return strings.Contains(k, "token") || strings.Contains(k, "password")
 }
 
 // validateInstallDirTemplate 校验安装目录模板，返回空串表示合法。

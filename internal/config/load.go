@@ -12,14 +12,21 @@ import (
 )
 
 // fileHeader 写在配置文件顶部，便于人直接读。
-const fileHeader = `# envlift 配置文件（schema v1）
+const fileHeader = `# envlift 配置文件（schema v2）
 # 由 envlift scan 生成，可手工编辑。
 # 脱敏占位符：${USER} = 用户名，${HOST} = 主机名。
 `
 
 // migrations[n] 把 schema n-1 的配置迁移到 schema n。
-// 目前只有 v1，尚无迁移步骤；保留骨架供后续版本使用（D9）。
-var migrations = map[int]func(*Config) error{}
+// v1→v2 只新增可选字段，不需要改写已有数据；保留显式步骤，便于审计。
+var migrations = map[int]func(*Config) error{
+	2: func(c *Config) error {
+		if c.CondaEnvs == nil {
+			c.CondaEnvs = []CondaEnv{}
+		}
+		return nil
+	},
+}
 
 // Load 从 path 读取并校验配置。
 //

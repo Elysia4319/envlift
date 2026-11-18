@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Elysia4319/envlift/internal/conda"
 	"github.com/Elysia4319/envlift/internal/config"
 	"github.com/Elysia4319/envlift/internal/match"
 	"github.com/Elysia4319/envlift/internal/probe"
@@ -69,9 +70,11 @@ func usage() {
 
 用法:
   envlift scan    [--out <path>] [--raw] [--overwrite] [--yes]
+                  [--keep-pip-bootstrap]
                                                    只读扫描，预览确认后写配置
   envlift restore [--config <path>] [--apply] [--yes]
                   [--plan-out <file>] [--installers <dir>]
+                  [--conda-packages conda|pip|both|none]
                   [--from-user <old>] [--from-host <old>]
                                                    还原（默认仅预演）
   envlift                     无参数：启动图形界面
@@ -91,6 +94,7 @@ func runScan(args []string) int {
 	raw := fs.Bool("raw", false, "关闭脱敏，输出真实用户名与主机名")
 	overwrite := fs.Bool("overwrite", false, "目标文件已存在时覆盖（先备份为 .bak）")
 	yes := fs.Bool("yes", false, "跳过写入确认")
+	keepPipBootstrap := fs.Bool("keep-pip-bootstrap", false, "保留 pip/setuptools/wheel 等基础包")
 	if err := fs.Parse(args); err != nil {
 		return exitError
 	}
@@ -103,8 +107,10 @@ func runScan(args []string) int {
 		SysInfo:      sysinfo.New(reg),
 		Prober:       probe.New(4 * time.Second),
 		Redactor:     config.NewRedactor("", ""),
+		Conda:        conda.NewScanner(),
 	}
 	scanner.Redactor.Raw = *raw
+	scanner.Conda.KeepPipBootstrap = *keepPipBootstrap
 
 	fmt.Println("正在只读扫描…")
 	res, err := scanner.Run()
@@ -140,10 +146,10 @@ func runScan(args []string) int {
 		return exitError
 	}
 	fmt.Printf("\n已写入 %s\n", *out)
-	fmt.Printf("  PATH %d 条（用户 %d / 系统 %d）· 运行时 %d 个 · 盘符 %d 个\n",
+	fmt.Printf("  PATH %d 条（用户 %d / 系统 %d）· 运行时 %d 个 · conda 环境 %d 个 · 盘符 %d 个\n",
 		len(res.Config.Path.User)+len(res.Config.Path.Machine),
 		len(res.Config.Path.User), len(res.Config.Path.Machine),
-		len(res.Config.Runtimes), len(res.Config.DriveMap))
+		len(res.Config.Runtimes), len(res.Config.CondaEnvs), len(res.Config.DriveMap))
 	fmt.Println("  下一步: 审阅该文件，手工补全 drive_map.purpose；还原前请先运行 envlift restore（默认预演）。")
 	return exitOK
 }
@@ -233,12 +239,42 @@ func renderPreview(w io.Writer, res *scan.Result) {
 	}
 
 	renderSoftware(w, res)
+	renderConda(w, res)
 
 	if len(res.Warnings) > 0 {
 		fmt.Fprintln(w, "\n警告")
 		for _, warning := range res.Warnings {
 			fmt.Fprintf(w, "  - %s\n", warning)
 		}
+	}
+}
+
+// renderConda 展示 conda 环境快照与预计恢复范围。
+func renderConda(w io.Writer, res *scan.Result) {
+	envs := res.Config.CondaEnvs
+	fmt.Fprintf(w, "\nconda 环境\n")
+	if len(envs) == 0 {
+		fmt.Fprintln(w, "  （未发现）")
+		return
+	}
+	for _, e := range envs {
+		mode := "只读"
+		if !e.Base {
+			var parts []string
+			if e.CondaEnabled() {
+				parts = append(parts, "conda")
+			}
+			if e.PipEnabled() {
+				parts = append(parts, "pip")
+			}
+			mode = strings.Join(parts, "+")
+			if mode == "" {
+				mode = "跳过"
+			}
+		}
+		fmt.Fprintf(w, "  %s%s  py=%s  conda=%d  pip=%d  %s\n",
+			pad(e.Name, 18), pad(mode, 12), orDash(e.PythonVersion),
+			len(e.Packages), len(e.PipPackages), e.Prefix)
 	}
 }
 

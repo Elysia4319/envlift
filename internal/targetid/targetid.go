@@ -28,6 +28,8 @@ const (
 	// manual 或待确认，④ 的决策也要能引用它们。因此扩一类，公式不变——
 	// 扩展点在这里明确记一笔，避免以后有人以为漏了。
 	KindRuntime = "runtime"
+	// KindCondaEnv 是 conda 环境条目的类别。
+	KindCondaEnv = "conda_env"
 )
 
 // idLen 是截断长度。12 个十六进制字符（48 bit）对上万个条目的场景绰绰有余，
@@ -130,6 +132,22 @@ func Runtime(rt config.Runtime) string {
 		Version: deref(rt.Version),
 		Scope:   RuntimeScope(rt),
 		Value:   deref(rt.Executable),
+	}.ID()
+}
+
+// CondaEnv 按 config.CondaEnv 生成 id。
+//
+// 环境身份只用 name + python 版本：换机后 conda 可能装在不同盘符，
+// prefix 也会随用户名变化，不能进哈希。同名同版本的多个 conda 安装会碰撞，
+// 这是刻意的——plan 会显式标 needs-disambiguation，不靠 id 猜。
+// 同机多个 conda 安装出现同名同版本环境时，plan 会显式标 needs-disambiguation，
+// 不靠 id 碰撞来猜。
+func CondaEnv(env config.CondaEnv) string {
+	return Key{
+		Kind:    KindCondaEnv,
+		Name:    env.Name,
+		Version: env.PythonVersion,
+		Scope:   "conda",
 	}.ID()
 }
 

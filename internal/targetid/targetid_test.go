@@ -242,3 +242,15 @@ func TestIDIsNotPersisted(t *testing.T) {
 		t.Error("同一条目两次计算 id 不一致")
 	}
 }
+
+func TestCondaEnvIDStableAcrossPrefix(t *testing.T) {
+	a := config.CondaEnv{Name: "py311", Prefix: `C:\Users\alice\miniconda3\envs\py311`, PythonVersion: "3.11.9"}
+	b := config.CondaEnv{Name: "py311", Prefix: `D:\conda\envs\py311`, PythonVersion: "3.11.9"}
+	if CondaEnv(a) != CondaEnv(b) {
+		t.Fatalf("conda 环境 id 不应依赖 prefix: %s != %s", CondaEnv(a), CondaEnv(b))
+	}
+	b.PythonVersion = "3.12.1"
+	if CondaEnv(a) == CondaEnv(b) {
+		t.Fatal("不同 Python 版本应得到不同 id")
+	}
+}
