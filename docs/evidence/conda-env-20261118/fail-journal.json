@@ -2,7 +2,7 @@
   "app": "envlift",
   "kind": "apply-journal",
   "schema": 2,
-  "started_at": "2026-11-18T15:48:54+08:00",
+  "started_at": "2026-11-18T16:25:54+08:00",
   "config_path": "conda-fail-fixed.yaml",
   "steps": [
     {
@@ -16,8 +16,8 @@
       "exit_code": 1,
       "output": "$ C:\\Miniconda3\\Scripts\\conda.exe install --yes --prefix \"C:\\My Apps\\conda测试\" --override-channels -c conda-forge --file reports\\conda\\conda测试\\specs.txt\nChannels:\r\n - conda-forge\r\nPlatform: win-64\r\nCollecting package metadata (repodata.json): ...working... done\r\nSolving environment: ...working... failed\r\nChannels:\r\n - conda-forge\r\nPlatform: win-64\r\nCollecting package metadata (repodata.json): ...working... done\r\nSolving environment: ...working... failed\r\n\r\nPackagesNotFoundInChannelsError: The following packages are not available from current channels:\r\n\r\n  - definitely-not-a-real-package-xyz\r\n\r\nCurrent channels:\r\n\r\n  - https://conda.anaconda.org/conda-forge\r\n\r\nTo search for alternate channels that may provide the conda package you're\r\nlooking for, navigate to\r\n\r\n    https://anaconda.org\r\n\r\nand use the search bar at the top of the page.\n环境不会自动删除；如需清理请手工运行: conda env remove --prefix \"C:\\My Apps\\conda测试\"",
       "status": "failed",
-      "started_at": "2026-11-18T15:48:54+08:00",
-      "finished_at": "2026-11-18T15:49:06+08:00"
+      "started_at": "2026-11-18T16:25:54+08:00",
+      "finished_at": "2026-11-18T16:26:22+08:00"
     }
   ],
   "finished": true,

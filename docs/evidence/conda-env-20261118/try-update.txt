@@ -25,7 +25,7 @@ The following packages will be downloaded:
 
 The following NEW packages will be INSTALLED:
 
-  scipy              conda-forge/win-64::scipy-1.17.1-py311h9c22a71_1 
+  scipy              conda-forge/win-64::scipy-1.17.1-py311h9c22a71_1
 
 
 

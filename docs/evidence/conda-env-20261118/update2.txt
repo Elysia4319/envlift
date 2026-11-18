@@ -37,4 +37,4 @@ PATH 变更 0 条。
 回滚命令: envlift restore --rollback --journal "reports\.envlift-journal-20261118-154828.json"
 报告: reports\restore-20261118-154828.md
       reports\restore-20261118-154828.json
-EXIT2=0 
+EXIT2=0
