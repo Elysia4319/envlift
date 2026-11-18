@@ -315,8 +315,9 @@ func buildItems(p *plan.Plan, steps []apply.Step) []ItemResult {
 			r.VersionRaw = s.VersionRaw
 			r.InstallDirVerified = s.InstallDirVerified
 			r.InstallDirActual = s.InstallDirActual
-			// verify 跑过且成功、却解析不出版本 → 明确标 unparsed（不是"没跑"）。
-			if it.VerifyCmd != "" && s.ActualVersion == "" && s.Status != apply.StepUnverified {
+			// 只有 verify 成功、却解析不出版本才标 unparsed；失败/阻止/未验证
+			// 本来就没有可信版本，标 unparsed 会与失败原因混淆。
+			if it.VerifyCmd != "" && s.ActualVersion == "" && s.Status == apply.StepOK {
 				r.VersionUnparsed = true
 			}
 		}
