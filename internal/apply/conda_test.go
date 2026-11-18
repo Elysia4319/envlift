@@ -63,7 +63,7 @@ func TestCondaApplyWritesTempFilesAndCleansUp(t *testing.T) {
 		case strings.Contains(cmd, "pip install"):
 			return ExecResult{ExitCode: 0}
 		case strings.Contains(cmd, "conda list"):
-			return ExecResult{Output: `[{"name":"numpy","version":"1.26.4","build":"py311_0"}]`}
+			return ExecResult{Output: `[{"name":"numpy","version":"1.26.4","build":"py311_0"},{"name":"python","version":"3.11.18","build":"h1"}]`}
 		case strings.Contains(cmd, "pip list"):
 			return ExecResult{Output: `[{"name":"requests","version":"2.31.0"}]`}
 		default:
@@ -72,7 +72,8 @@ func TestCondaApplyWritesTempFilesAndCleansUp(t *testing.T) {
 	}}
 	spec := sampleSpec()
 	p := condaPlanItem(t, spec)
-	res, err := Run(baseOpts(t, p, ex, &fakePaths{}))
+	opts := baseOpts(t, p, ex, &fakePaths{})
+	res, err := Run(opts)
 	if err != nil {
 		t.Fatalf("Run 失败: %v", err)
 	}
@@ -87,6 +88,9 @@ func TestCondaApplyWritesTempFilesAndCleansUp(t *testing.T) {
 	}
 	if len(p.Items[0].CondaMissing) != 0 {
 		t.Fatalf("不应有缺包: %+v", p.Items[0].CondaMissing)
+	}
+	if len(opts.Journal.Steps) != 1 || opts.Journal.Steps[0].ActualVersion != "3.11.18" {
+		t.Fatalf("journal 应记录 python 实际版本: %+v", opts.Journal.Steps)
 	}
 }
 

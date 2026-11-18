@@ -464,12 +464,17 @@ func runCondaItem(opts Options, res *Result, index int, it plan.Item, started st
 
 	// 校验：缺包/版本不符时只能标 unverified，不能报成功。
 	var reasons []string
-	if spec.RestoreConda {
-		got, err := condaVerifyList(opts, spec)
-		if err != nil {
-			reasons = append(reasons, "conda list 校验失败: "+err.Error())
-		} else if missing := conda.CompareConda(spec.Packages, got); len(missing) > 0 {
-			reasons = append(reasons, "conda 包不完整: "+strings.Join(missing, "; "))
+	condaPkgs, condaErr := condaVerifyList(opts, spec)
+	if condaErr != nil {
+		reasons = append(reasons, "conda list 校验失败: "+condaErr.Error())
+	} else {
+		if v := condaPythonVersion(condaPkgs); v != "" {
+			step.ActualVersion = v
+		}
+		if spec.RestoreConda {
+			if missing := conda.CompareConda(spec.Packages, condaPkgs); len(missing) > 0 {
+				reasons = append(reasons, "conda 包不完整: "+strings.Join(missing, "; "))
+			}
 		}
 	}
 	if spec.RestorePip {
@@ -532,6 +537,15 @@ func pipVerifyList(opts Options, spec *plan.CondaSpec) ([]config.PipPackage, err
 		return nil, fmt.Errorf("pip list 失败: %s", truncate(rr.Output, 300))
 	}
 	return conda.ParsePipList([]byte(rr.Output))
+}
+
+func condaPythonVersion(pkgs []config.CondaPackage) string {
+	for _, p := range pkgs {
+		if strings.EqualFold(strings.TrimSpace(p.Name), "python") {
+			return p.Version
+		}
+	}
+	return ""
 }
 
 func planCondaExe(spec *plan.CondaSpec) string {

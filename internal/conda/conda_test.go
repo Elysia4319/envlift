@@ -55,7 +55,7 @@ func (f *fakeFS) Stat(path string) (os.FileInfo, error) {
 func TestScanCollectsAllCondaInstallsAndFiltersBootstrap(t *testing.T) {
 	root := `C:\Users\olduser\miniconda3`
 	exe := filepath.Join(root, "Scripts", "conda.exe")
-	named := filepath.Join(root, "envs", "科研 环境")
+	named := filepath.Join(root, "envs", "科研环境")
 	fs := &fakeFS{files: map[string]bool{
 		normalizePath(exe): true,
 		normalizePath(filepath.Join(root, "python.exe")):  true,
@@ -114,7 +114,7 @@ func TestScanCollectsAllCondaInstallsAndFiltersBootstrap(t *testing.T) {
 		switch res.Envs[i].Name {
 		case "base":
 			base = &res.Envs[i]
-		case "科研 环境":
+		case "科研环境":
 			sci = &res.Envs[i]
 		}
 	}

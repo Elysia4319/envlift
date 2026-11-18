@@ -122,6 +122,33 @@ func TestUnverifiedStepIsNotSucceeded(t *testing.T) {
 	}
 }
 
+func TestCondaSucceededHasActualVersion(t *testing.T) {
+	p := &plan.Plan{
+		App: "envlift", Kind: "restore-plan", Schema: config.CurrentSchema,
+		Target: plan.Target{OS: "Windows 11", Arch: "amd64", Username: "${USER}", Hostname: "${HOST}"},
+		Items: []plan.Item{{
+			TargetID: "c1", Kind: plan.KindCondaEnv, Name: "py311",
+			Tier: plan.TierConda, Status: plan.StatusPlanned,
+			Command: "conda install", VerifyCmd: "conda list --json",
+		}},
+	}
+	doc := Build(Input{
+		Plan:  p,
+		Apply: &apply.Result{Executed: 1},
+		Steps: []apply.Step{{
+			Index: 0, Kind: plan.KindCondaEnv, Name: "py311", Tier: plan.TierConda,
+			Status: apply.StepOK, ActualVersion: "3.11.18",
+		}},
+		Now: time.Now(),
+	}, time.Now())
+	if doc.Items[0].ActualVersion != "3.11.18" {
+		t.Fatalf("actual_version=%q", doc.Items[0].ActualVersion)
+	}
+	if doc.Items[0].VersionUnparsed {
+		t.Fatal("成功记录 python 版本后不应标 version_unparsed")
+	}
+}
+
 func TestApplyModeRecordsSteps(t *testing.T) {
 	dir := t.TempDir()
 	p := samplePlan()
