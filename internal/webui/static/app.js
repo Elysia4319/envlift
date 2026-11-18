@@ -886,10 +886,14 @@
         condaNote = '<br><span class="hint">conda ' + ((it.conda.packages || []).length)
           + ' 包 · pip ' + ((it.conda.pip_packages || []).length) + ' 包';
         if ((it.conda_missing || []).length) {
-          condaNote += ' · 缺 conda ' + it.conda_missing.length;
+          condaNote += ' · 缺 conda ' + it.conda_missing.length + '：'
+            + esc(it.conda_missing.slice(0, 4).join(', '))
+            + (it.conda_missing.length > 4 ? ' …' : '');
         }
         if ((it.pip_missing || []).length) {
-          condaNote += ' · 缺 pip ' + it.pip_missing.length;
+          condaNote += ' · 缺 pip ' + it.pip_missing.length + '：'
+            + esc(it.pip_missing.slice(0, 4).join(', '))
+            + (it.pip_missing.length > 4 ? ' …' : '');
         }
         condaNote += '</span>';
       }
