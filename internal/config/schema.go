@@ -180,7 +180,7 @@ type CondaEnv struct {
 	PythonVersion string `yaml:"python_version,omitempty" json:"python_version,omitempty"`
 	// Base 表示这是 conda 的 base 环境。默认不进入可恢复列表。
 	Base bool `yaml:"base,omitempty" json:"base,omitempty"`
-	// RestoreConda / RestorePip 是 GUI 侧开关；nil 表示按默认 true 处理。
+	// RestoreConda / RestorePip 是 GUI 侧开关；nil 表示按默认 false 处理。
 	RestoreConda *bool `yaml:"restore_conda,omitempty" json:"restore_conda,omitempty"`
 	RestorePip   *bool `yaml:"restore_pip,omitempty" json:"restore_pip,omitempty"`
 	// Mirror 引用 mirrors: 里的 profile 名；空表示直连默认源。
@@ -189,14 +189,14 @@ type CondaEnv struct {
 	PipPackages []PipPackage   `yaml:"pip_packages,omitempty" json:"pip_packages,omitempty"`
 }
 
-// CondaEnabled 报告是否恢复 conda 包（缺省 true）。
+// CondaEnabled 报告是否恢复 conda 包（缺省 false）。
 func (e CondaEnv) CondaEnabled() bool {
-	return e.RestoreConda == nil || *e.RestoreConda
+	return e.RestoreConda != nil && *e.RestoreConda
 }
 
-// PipEnabled 报告是否恢复 pip 包（缺省 true）。
+// PipEnabled 报告是否恢复 pip 包（缺省 false）。
 func (e CondaEnv) PipEnabled() bool {
-	return e.RestorePip == nil || *e.RestorePip
+	return e.RestorePip != nil && *e.RestorePip
 }
 
 // CondaPackage 是 conda list 的一条记录。

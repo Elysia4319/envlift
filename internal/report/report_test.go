@@ -102,7 +102,7 @@ func TestUnverifiedStepIsNotSucceeded(t *testing.T) {
 		Items: []plan.Item{{
 			TargetID: "c1", Kind: plan.KindCondaEnv, Name: "py311",
 			Tier: plan.TierConda, Status: plan.StatusPlanned,
-			Command: "conda env update", VerifyCmd: "conda list --json",
+			Command: "conda install", VerifyCmd: "conda list --json",
 		}},
 	}
 	doc := Build(Input{

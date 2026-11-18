@@ -76,6 +76,8 @@ type RuntimeState struct {
 
 // CondaEnvState 是目标机上某个 conda 环境的现状。
 type CondaEnvState struct {
+	Name          string                         `json:"name,omitempty"`
+	Manager       string                         `json:"manager,omitempty"`
 	Present       bool                           `json:"present"`
 	Prefix        string                         `json:"prefix,omitempty"`
 	PythonVersion string                         `json:"python_version,omitempty"`
@@ -100,7 +102,7 @@ type Target struct {
 	NetworkNote string `json:"network_note,omitempty"`
 	// Runtimes 以运行时名为键。
 	Runtimes map[string]RuntimeState `json:"runtimes"`
-	// CondaEnvs 以 conda 环境名为键；同名多安装由配置侧判歧义。
+	// CondaEnvs 以归一化 prefix 为键；同名不同 prefix 不能按名称复用。
 	CondaEnvs map[string]CondaEnvState `json:"conda_envs,omitempty"`
 	// PathDirs 是目标机当前 PATH 的展开值，用于比对。
 	PathDirs []string `json:"path_dirs"`
@@ -839,12 +841,33 @@ func buildCondaItems(cfg *config.Config, opts Options, p *Plan, mode string) []I
 			Status: StatusPlanned, Tier: TierConda, NeedsAdmin: false,
 			Expected: env.PythonVersion,
 		}
-		state, present := opts.Target.CondaEnvs[env.Name]
+		prefix := opts.Expand(env.Prefix)
+		state, present := opts.Target.CondaEnvs[CondaStateKey(prefix)]
+		if !present {
+			var sameName []CondaEnvState
+			for _, st := range opts.Target.CondaEnvs {
+				if strings.EqualFold(strings.TrimSpace(st.Name), strings.TrimSpace(env.Name)) {
+					sameName = append(sameName, st)
+				}
+			}
+			if len(sameName) > 0 {
+				var prefixes []string
+				for _, st := range sameName {
+					prefixes = append(prefixes, st.Prefix)
+				}
+				it.Status = StatusAmbiguous
+				it.Tier = ""
+				it.Reason = fmt.Sprintf("目标机有同名环境 %q 但 prefix 不一致（配置 %s；目标 %s），不能按名称复用",
+					name, prefix, strings.Join(prefixes, " / "))
+				items = append(items, it)
+				continue
+			}
+		}
 		if present {
 			it.Current = state.PythonVersion
 		}
 		spec := &CondaSpec{
-			Name: name, Prefix: opts.Expand(env.Prefix), Manager: opts.Expand(env.Manager),
+			Name: name, Prefix: prefix, Manager: opts.Expand(env.Manager),
 			CondaExe: opts.Expand(env.CondaExe), PythonVersion: env.PythonVersion,
 			Mirror: env.Mirror, WorkDir: condaEnvWorkDir(opts.CondaWorkDir, name),
 			Profile:  mirrorProfile(cfg, env.Mirror),
@@ -974,15 +997,19 @@ func condaCommand(spec *CondaSpec) string {
 func CondaCommands(spec *CondaSpec) []string {
 	exe := condaExecutable(spec)
 	envFile := filepath.Join(spec.WorkDir, "environment.yml")
+	specsFile := filepath.Join(spec.WorkDir, "specs.txt")
 	reqFile := filepath.Join(spec.WorkDir, "requirements.txt")
+	channelArgs := condaChannelArgs(spec)
 	var out []string
 	if spec.RestoreConda {
 		if spec.Create {
-			out = append(out, quoteCommand(exe)+" env create --yes --prefix "+quoteCommand(spec.Prefix)+
-				" --file "+quoteCommand(envFile))
+			out = append(out, quoteCommand(exe)+" create --yes --prefix "+quoteCommand(spec.Prefix)+
+				channelArgs+" --file "+quoteCommand(envFile))
 		} else {
-			out = append(out, quoteCommand(exe)+" env update --yes --prefix "+quoteCommand(spec.Prefix)+
-				" --file "+quoteCommand(envFile))
+			// conda 26.9.3 的 env update 不支持 --yes，且 env update 会继承
+			// 默认频道并触发 ToS；用受支持的 conda install --file 规格文件。
+			out = append(out, quoteCommand(exe)+" install --yes --prefix "+quoteCommand(spec.Prefix)+
+				channelArgs+" --file "+quoteCommand(specsFile))
 		}
 	}
 	if spec.RestorePip {
@@ -990,6 +1017,87 @@ func CondaCommands(spec *CondaSpec) []string {
 		out = append(out, quoteCommand(py)+" -m pip install --no-input --disable-pip-version-check -r "+quoteCommand(reqFile))
 	}
 	return out
+}
+
+// CondaSpecLines 返回 conda install --file 使用的规格行。
+func CondaSpecLines(spec *CondaSpec) []string {
+	var out []string
+	if v := strings.TrimSpace(spec.PythonVersion); v != "" {
+		out = append(out, "python="+v)
+	}
+	seen := map[string]bool{}
+	for _, p := range spec.Packages {
+		if strings.TrimSpace(p.Name) == "" {
+			continue
+		}
+		if strings.EqualFold(p.Name, "python") && spec.PythonVersion != "" {
+			continue
+		}
+		key := strings.ToLower(p.Name)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, condaPackageSpec(p))
+	}
+	if spec.RestorePip && !seen["pip"] {
+		out = append(out, "pip")
+	}
+	return out
+}
+
+func condaPackageSpec(p config.CondaPackage) string {
+	s := p.Name
+	if p.Version != "" {
+		s += "=" + p.Version
+	}
+	if p.Build != "" {
+		s += "=" + p.Build
+	}
+	return s
+}
+
+// CondaChannels 返回执行时显式使用的频道；没有配置时返回空。
+func CondaChannels(spec *CondaSpec) []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(ch string) {
+		ch = strings.TrimSpace(ch)
+		if ch == "" || strings.EqualFold(ch, "defaults") ||
+			strings.EqualFold(ch, "pypi") || strings.Contains(ch, "REDACTED") {
+			return
+		}
+		key := strings.ToLower(ch)
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		out = append(out, ch)
+	}
+	if spec.Profile != nil {
+		for _, ch := range spec.Profile.CondaChannels {
+			add(ch)
+		}
+		return out
+	}
+	for _, p := range spec.Packages {
+		add(p.Channel)
+	}
+	return out
+}
+
+func condaChannelArgs(spec *CondaSpec) string {
+	channels := CondaChannels(spec)
+	if len(channels) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(" --override-channels")
+	for _, ch := range channels {
+		b.WriteString(" -c ")
+		b.WriteString(quoteCommand(ch))
+	}
+	return b.String()
 }
 
 func condaVerifyCommand(spec *CondaSpec) string {
@@ -1031,12 +1139,23 @@ func normalizeCondaMode(mode string) (string, error) {
 	mode = strings.ToLower(strings.TrimSpace(mode))
 	switch mode {
 	case "":
-		return CondaModeBoth, nil
+		return CondaModeNone, nil
 	case CondaModeConda, CondaModePip, CondaModeBoth, CondaModeNone:
 		return mode, nil
 	default:
 		return "", fmt.Errorf("--conda-packages 只能是 conda / pip / both / none，实际为 %q", mode)
 	}
+}
+
+// CondaStateKey 把 prefix 归一化成 target 状态表的键。
+//
+// 环境身份用 prefix 而不是 name：同名环境可能来自不同 conda 安装，
+// 按 name 查会把一个环境的包清单套到另一个环境上。
+func CondaStateKey(prefix string) string {
+	prefix = strings.TrimSpace(strings.Trim(prefix, `"`))
+	prefix = strings.ReplaceAll(prefix, "/", `\`)
+	prefix = strings.TrimRight(prefix, `\`)
+	return strings.ToLower(prefix)
 }
 
 func condaModeIncludes(mode, want string) bool {

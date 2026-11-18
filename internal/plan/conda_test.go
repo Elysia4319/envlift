@@ -48,6 +48,10 @@ func sampleCondaEnv() config.CondaEnv {
 	}
 }
 
+func sampleCondaKey() string {
+	return CondaStateKey(`C:\Users\olduser\miniconda3\envs\py311`)
+}
+
 func TestCondaPlanCreatesMissingEnv(t *testing.T) {
 	cfg := condaBaseConfig(sampleCondaEnv())
 	p, err := Build(condaOptions(cfg, Target{CondaEnvs: map[string]CondaEnvState{}}))
@@ -61,8 +65,11 @@ func TestCondaPlanCreatesMissingEnv(t *testing.T) {
 	if it.Kind != KindCondaEnv || it.Tier != TierConda || it.Status != StatusPlanned {
 		t.Fatalf("状态不对: %+v", it)
 	}
-	if !strings.Contains(it.Command, "env create") || !strings.Contains(it.Command, `C:\work\conda\py311`) {
+	if !strings.Contains(it.Command, "create --yes") || !strings.Contains(it.Command, `C:\work\conda\py311`) {
 		t.Fatalf("创建命令不对: %s", it.Command)
+	}
+	if !strings.Contains(it.Command, "--override-channels -c conda-forge") {
+		t.Fatalf("创建命令必须显式覆盖频道: %s", it.Command)
 	}
 	if len(it.CondaMissing) != 1 || it.CondaMissing[0] != "numpy" {
 		t.Fatalf("缺包列表不对: %+v", it.CondaMissing)
@@ -75,8 +82,8 @@ func TestCondaPlanCreatesMissingEnv(t *testing.T) {
 func TestCondaPlanSkipsWhenPackagesMatch(t *testing.T) {
 	cfg := condaBaseConfig(sampleCondaEnv())
 	target := Target{CondaEnvs: map[string]CondaEnvState{
-		"py311": {
-			Present: true, PythonVersion: "3.11.9",
+		sampleCondaKey(): {
+			Name: "py311", Present: true, Prefix: `C:\Users\olduser\miniconda3\envs\py311`, PythonVersion: "3.11.9",
 			Packages:    conda.CondaIndex([]config.CondaPackage{{Name: "numpy", Version: "1.26.4", Build: "py311_0"}}),
 			PipPackages: conda.PipIndex(nil),
 		},
@@ -92,11 +99,12 @@ func TestCondaPlanSkipsWhenPackagesMatch(t *testing.T) {
 
 func TestCondaPlanUpdatesMissingPip(t *testing.T) {
 	env := sampleCondaEnv()
-	env.RestorePip = nil // 默认 true
+	yes := true
+	env.RestorePip = &yes
 	cfg := condaBaseConfig(env)
 	target := Target{CondaEnvs: map[string]CondaEnvState{
-		"py311": {
-			Present: true, PythonVersion: "3.11.9",
+		sampleCondaKey(): {
+			Name: "py311", Present: true, Prefix: `C:\Users\olduser\miniconda3\envs\py311`, PythonVersion: "3.11.9",
 			Packages:    conda.CondaIndex([]config.CondaPackage{{Name: "numpy", Version: "1.26.4", Build: "py311_0"}}),
 			PipPackages: conda.PipIndex(nil),
 		},
@@ -143,5 +151,69 @@ func TestCondaPlanModeNoneSkips(t *testing.T) {
 	}
 	if p.Items[0].Status != StatusSkipped {
 		t.Fatalf("mode=none 应 skipped: %+v", p.Items[0])
+	}
+}
+
+func TestCondaModeDefaultIsNone(t *testing.T) {
+	mode, err := normalizeCondaMode("")
+	if err != nil || mode != CondaModeNone {
+		t.Fatalf("默认 mode=%q err=%v，期望 none", mode, err)
+	}
+}
+
+func TestCondaPlanSameNameDifferentPrefixIsNotSkipped(t *testing.T) {
+	cfg := condaBaseConfig(sampleCondaEnv())
+	target := Target{CondaEnvs: map[string]CondaEnvState{
+		CondaStateKey(`D:\OtherConda\envs\py311`): {
+			Name: "py311", Present: true, Prefix: `D:\OtherConda\envs\py311`, PythonVersion: "3.11.9",
+			Packages:    conda.CondaIndex([]config.CondaPackage{{Name: "numpy", Version: "1.26.4", Build: "py311_0"}}),
+			PipPackages: conda.PipIndex(nil),
+		},
+	}}
+	p, err := Build(condaOptions(cfg, target))
+	if err != nil {
+		t.Fatalf("Build 失败: %v", err)
+	}
+	it := p.Items[0]
+	if it.Status == StatusSkipped || it.Status == StatusPlanned {
+		t.Fatalf("同名不同 prefix 不应按名称复用: %+v", it)
+	}
+	if !strings.Contains(it.Reason, "prefix 不一致") {
+		t.Fatalf("原因应说明 prefix 不一致: %s", it.Reason)
+	}
+}
+
+func TestCondaPlanUpdateCommandHasNoUnsupportedYes(t *testing.T) {
+	cfg := condaBaseConfig(sampleCondaEnv())
+	target := Target{CondaEnvs: map[string]CondaEnvState{
+		sampleCondaKey(): {
+			Name: "py311", Present: true, Prefix: `C:\Users\olduser\miniconda3\envs\py311`, PythonVersion: "3.11.9",
+			Packages:    conda.CondaIndex(nil),
+			PipPackages: conda.PipIndex(nil),
+		},
+	}}
+	p, err := Build(condaOptions(cfg, target))
+	if err != nil {
+		t.Fatalf("Build 失败: %v", err)
+	}
+	it := p.Items[0]
+	if it.Status != StatusPlanned {
+		t.Fatalf("缺包应 planned: %+v", it)
+	}
+	if !strings.Contains(it.Command, "install --yes --prefix") {
+		t.Fatalf("更新命令不对: %s", it.Command)
+	}
+	if !strings.Contains(it.Command, "--override-channels -c conda-forge") {
+		t.Fatalf("更新命令必须显式覆盖频道: %s", it.Command)
+	}
+	if strings.Contains(it.Command, "env update") {
+		t.Fatalf("不应使用不支持 --yes 的 conda env update: %s", it.Command)
+	}
+	lines := CondaSpecLines(it.Conda)
+	joined := strings.Join(lines, "\n")
+	for _, want := range []string{"python=3.11.9", "numpy=1.26.4=py311_0"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("specs.txt 缺少 %q: %s", want, joined)
+		}
 	}
 }

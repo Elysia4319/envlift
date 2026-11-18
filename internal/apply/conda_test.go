@@ -58,7 +58,7 @@ func sampleSpec() *plan.CondaSpec {
 func TestCondaApplyWritesTempFilesAndCleansUp(t *testing.T) {
 	ex := &condaExec{respond: func(cmd string) ExecResult {
 		switch {
-		case strings.Contains(cmd, "env create"):
+		case strings.Contains(cmd, "create --yes"):
 			return ExecResult{ExitCode: 0}
 		case strings.Contains(cmd, "pip install"):
 			return ExecResult{ExitCode: 0}
@@ -117,7 +117,7 @@ func TestCondaApplyUnverifiedWhenPackageMissing(t *testing.T) {
 
 func TestCondaApplyFailureKeepsEnvironment(t *testing.T) {
 	ex := &condaExec{respond: func(cmd string) ExecResult {
-		if strings.Contains(cmd, "env create") {
+		if strings.Contains(cmd, "create --yes") {
 			return ExecResult{ExitCode: 1, Output: "solver failed"}
 		}
 		return ExecResult{ExitCode: 0}

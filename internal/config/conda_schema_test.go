@@ -133,6 +133,13 @@ func TestCondaEnvRequiresPrefixAndKnownMirror(t *testing.T) {
 	}
 }
 
+func TestCondaRestoreDefaultsFalse(t *testing.T) {
+	env := CondaEnv{Name: "py311", Prefix: `C:\env`}
+	if env.CondaEnabled() || env.PipEnabled() {
+		t.Fatal("未显式设置的 conda/pip 开关必须默认 false")
+	}
+}
+
 func TestSchemaV3Rejected(t *testing.T) {
 	src := `
 app: envlift

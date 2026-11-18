@@ -68,7 +68,8 @@ func TestScanCollectsAllCondaInstallsAndFiltersBootstrap(t *testing.T) {
 			return Result{Output: `{"conda_version":"24.1.2","root_prefix":"` + strings.ReplaceAll(root, `\`, `\\`) + `"}`}
 		case strings.Contains(key, "env list --json"):
 			return Result{Output: `{"envs":["` + strings.ReplaceAll(root, `\`, `\\`) + `","` +
-				strings.ReplaceAll(named, `\`, `\\`) + `"]}`}
+				strings.ReplaceAll(named, `\`, `\\`) + `","` +
+				strings.ReplaceAll(strings.ToLower(root), `\`, `\\`) + `"]}`}
 		case strings.Contains(key, "list --json --prefix"):
 			if strings.Contains(key, "科研") {
 				return Result{Output: `[
@@ -84,6 +85,8 @@ func TestScanCollectsAllCondaInstallsAndFiltersBootstrap(t *testing.T) {
 				{"name":"pip","version":"24.0"},
 				{"name":"setuptools","version":"69.0"},
 				{"name":"wheel","version":"0.42"},
+				{"name":"numpy","version":"1.26.4"},
+				{"name":"cloudpickle","version":"3.1.2"},
 				{"name":"requests","version":"2.31.0"}
 			]`}
 		case strings.Contains(key, "pip list"):
@@ -121,14 +124,21 @@ func TestScanCollectsAllCondaInstallsAndFiltersBootstrap(t *testing.T) {
 	if !base.Base || base.CondaEnabled() || base.PipEnabled() {
 		t.Fatalf("base 应只读: %+v", base)
 	}
-	if !sci.CondaEnabled() || !sci.PipEnabled() {
-		t.Fatalf("命名环境默认应可恢复: %+v", sci)
+	if sci.CondaEnabled() || sci.PipEnabled() {
+		t.Fatalf("命名环境默认应不恢复: %+v", sci)
 	}
 	if sci.PythonVersion != "3.11.9" {
 		t.Fatalf("PythonVersion=%q", sci.PythonVersion)
 	}
-	if len(sci.PipPackages) != 1 || NormalizePipName(sci.PipPackages[0].Name) != "requests" {
-		t.Fatalf("pip bootstrap 未过滤: %+v", sci.PipPackages)
+	if len(sci.PipPackages) != 2 {
+		t.Fatalf("pip 应保留 cloudpickle + requests: %+v", sci.PipPackages)
+	}
+	for _, p := range sci.PipPackages {
+		switch NormalizePipName(p.Name) {
+		case "requests", "cloudpickle":
+		default:
+			t.Fatalf("pip 清单包含不应出现的包: %+v", sci.PipPackages)
+		}
 	}
 	ch := ""
 	for _, p := range sci.Packages {
@@ -145,6 +155,13 @@ func TestScanCollectsAllCondaInstallsAndFiltersBootstrap(t *testing.T) {
 	if !strings.Contains(ch, "example.com") {
 		t.Fatalf("channel 主机丢失: %q", ch)
 	}
+	req := string(RequirementsTXT(*sci))
+	if strings.Contains(strings.ToLower(req), "numpy") {
+		t.Fatalf("requirements.txt 不应重复包含 conda 包 numpy: %s", req)
+	}
+	if !strings.Contains(strings.ToLower(req), "requests") {
+		t.Fatalf("requirements.txt 应包含 pip 包 requests: %s", req)
+	}
 }
 
 func TestEnvironmentYAMLAndCompare(t *testing.T) {
@@ -155,6 +172,8 @@ func TestEnvironmentYAMLAndCompare(t *testing.T) {
 		},
 		PipPackages: []config.PipPackage{{Name: "Requests", Version: "2.31.0"}},
 	}
+	yes := true
+	env.RestorePip = &yes
 	data, err := EnvironmentYAML(env, nil)
 	if err != nil {
 		t.Fatalf("EnvironmentYAML: %v", err)

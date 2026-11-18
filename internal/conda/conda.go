@@ -170,6 +170,7 @@ func (s *Scanner) Scan(ctx context.Context) (ScanResult, error) {
 			out.Warnings = append(out.Warnings, fmt.Sprintf("读取 %s 的环境列表失败: %v", root, err))
 			continue
 		}
+		prefixes = dedupePaths(prefixes)
 		if !containsPath(prefixes, root) {
 			prefixes = append([]string{root}, prefixes...)
 		}
@@ -206,29 +207,41 @@ func (s *Scanner) scanEnv(ctx context.Context, exe, root, condaVersion, prefix s
 		Name: name, Prefix: prefix, Manager: root, CondaExe: exe,
 		CondaVersion: condaVersion, Base: base,
 	}
-	enabled := !base
+	// 低风险默认：扫描只记录，不默认恢复；用户必须在 GUI 勾选或显式传
+	// --conda-packages=conda|pip|both 才执行。
+	enabled := false
 	env.RestoreConda = &enabled
 	env.RestorePip = &enabled
 
 	var warns []string
+	condaNames := map[string]bool{}
+	var pypiFromConda []config.PipPackage
 	pkgs, err := s.condaList(ctx, exe, prefix)
 	if err != nil {
 		warns = append(warns, fmt.Sprintf("读取 conda 环境 %s 的包列表失败: %v", name, err))
 	} else {
-		env.Packages = pkgs
 		for _, p := range pkgs {
+			if strings.EqualFold(strings.TrimSpace(p.Channel), "pypi") {
+				// conda list 把 pip 安装的包标成 channel=pypi；它们属于 pip 清单。
+				pypiFromConda = append(pypiFromConda, config.PipPackage{Name: p.Name, Version: p.Version})
+				continue
+			}
+			env.Packages = append(env.Packages, p)
+			condaNames[NormalizePipName(p.Name)] = true
 			if strings.EqualFold(p.Name, "python") {
 				env.PythonVersion = p.Version
-				break
 			}
 		}
 	}
 	pips, err := s.pipList(ctx, prefix)
 	if err != nil {
 		warns = append(warns, fmt.Sprintf("读取 conda 环境 %s 的 pip 包列表失败: %v", name, err))
-	} else {
-		env.PipPackages = filterPipBootstrap(pips, s.KeepPipBootstrap)
 	}
+	// conda 安装的包也会出现在 pip list 里（共享 site-packages）。按 PEP 503
+	// 规范化名称剔除重叠项，否则 requirements.txt 会把 numpy 等再装一遍。
+	pips = mergePip(pips, pypiFromConda)
+	pips = filterPipOverlap(pips, condaNames)
+	env.PipPackages = filterPipBootstrap(pips, s.KeepPipBootstrap)
 	return env, warns
 }
 
@@ -333,11 +346,6 @@ func (s *Scanner) condaList(ctx context.Context, exe, prefix string) ([]config.C
 		if strings.TrimSpace(p.Name) == "" {
 			continue
 		}
-		// conda list 会把 pip 安装的包标成 channel=pypi；它们属于 Phase 2 的
-		// pip 清单，写进 environment.yml 会变成非法的 pypi::name 依赖。
-		if strings.EqualFold(strings.TrimSpace(p.Channel), "pypi") {
-			continue
-		}
 		out = append(out, config.CondaPackage{
 			Name: p.Name, Version: p.Version, Build: p.Build,
 			Channel: RedactURL(p.Channel),
@@ -395,9 +403,6 @@ func ParseCondaList(data []byte) ([]config.CondaPackage, error) {
 	out := make([]config.CondaPackage, 0, len(raw))
 	for _, p := range raw {
 		if strings.TrimSpace(p.Name) == "" {
-			continue
-		}
-		if strings.EqualFold(strings.TrimSpace(p.Channel), "pypi") {
 			continue
 		}
 		out = append(out, config.CondaPackage{
@@ -489,6 +494,21 @@ func containsPath(list []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// dedupePaths 按 Windows 路径语义去重，保留首次出现的原始大小写。
+func dedupePaths(list []string) []string {
+	out := make([]string, 0, len(list))
+	seen := map[string]bool{}
+	for _, p := range list {
+		key := normalizePath(p)
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, p)
+	}
+	return out
 }
 
 // RedactURL 去掉 URL 里的用户名密码与敏感查询参数。

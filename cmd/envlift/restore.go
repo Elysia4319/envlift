@@ -48,7 +48,7 @@ func runRestore(args []string) int {
 	journalPath := fs.String("journal", "", "指定 journal 文件（回滚用，缺省取 reports/ 下最新）")
 	decisionsPath := fs.String("decisions", "", "决策文件（缺省读配置同目录的 envlift.decisions.yaml，存在则加载）")
 	relocationsPath := fs.String("relocations", relocation.DefaultPath, "重装账本路径")
-	condaPackages := fs.String("conda-packages", plan.CondaModeBoth, "conda 环境恢复范围：conda / pip / both / none")
+	condaPackages := fs.String("conda-packages", plan.CondaModeNone, "conda 环境恢复范围：conda / pip / both / none（默认 none）")
 	if err := fs.Parse(args); err != nil {
 		return exitError
 	}
@@ -242,14 +242,14 @@ func buildTarget(env *scan.Environment) plan.Target {
 		t.Runtimes[r.Name] = st
 	}
 	for _, e := range env.CondaEnvs {
-		t.CondaEnvs[e.Name] = condaState(e)
+		t.CondaEnvs[plan.CondaStateKey(e.Prefix)] = condaState(e)
 	}
 	return t
 }
 
 func condaState(e config.CondaEnv) plan.CondaEnvState {
 	st := plan.CondaEnvState{
-		Present: true, Prefix: e.Prefix, PythonVersion: e.PythonVersion,
+		Name: e.Name, Manager: e.Manager, Present: true, Prefix: e.Prefix, PythonVersion: e.PythonVersion,
 		Packages: conda.CondaIndex(e.Packages), PipPackages: conda.PipIndex(e.PipPackages),
 	}
 	return st

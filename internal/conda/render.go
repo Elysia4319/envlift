@@ -34,7 +34,49 @@ func filterPipBootstrap(in []config.PipPackage, keep bool) []config.PipPackage {
 	return out
 }
 
-// EnvironmentYAML 生成 conda env create/update 用的 environment.yml。
+// filterPipOverlap 剔除同时由 conda 管理的包。
+//
+// conda 环境的 site-packages 同时出现在 conda list 与 pip list 里；若不去重，
+// requirements.txt 会把 numpy/scipy 等再走一遍 pip，既慢又可能装成另一份 wheel。
+func filterPipOverlap(in []config.PipPackage, condaNames map[string]bool) []config.PipPackage {
+	if len(condaNames) == 0 {
+		return in
+	}
+	out := make([]config.PipPackage, 0, len(in))
+	for _, p := range in {
+		if condaNames[NormalizePipName(p.Name)] {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+// mergePip 合并 pip list 与 conda list 的 pypi 条目，按规范化名称去重。
+func mergePip(primary, fallback []config.PipPackage) []config.PipPackage {
+	out := make([]config.PipPackage, 0, len(primary)+len(fallback))
+	seen := map[string]bool{}
+	add := func(p config.PipPackage) {
+		key := NormalizePipName(p.Name)
+		if key == "" || seen[key] {
+			return
+		}
+		seen[key] = true
+		out = append(out, p)
+	}
+	for _, p := range primary {
+		add(p)
+	}
+	for _, p := range fallback {
+		add(p)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return NormalizePipName(out[i].Name) < NormalizePipName(out[j].Name)
+	})
+	return out
+}
+
+// EnvironmentYAML 生成 conda create 用的 environment.yml。
 //
 // 不把 pip 包写进 environment.yml：pip 恢复由 Phase 2 单独执行，两者开关分开。
 func EnvironmentYAML(env config.CondaEnv, profile *config.MirrorProfile) ([]byte, error) {

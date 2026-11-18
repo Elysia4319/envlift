@@ -404,6 +404,7 @@ func runCondaItem(opts Options, res *Result, index int, it plan.Item, started st
 
 	envVars := []string{"PIP_DISABLE_PIP_VERSION_CHECK=1"}
 	envFile := filepath.Join(work, "environment.yml")
+	specsFile := filepath.Join(work, "specs.txt")
 	reqFile := filepath.Join(work, "requirements.txt")
 	condarc := filepath.Join(work, "condarc")
 	pipIni := filepath.Join(work, "pip.ini")
@@ -415,6 +416,9 @@ func runCondaItem(opts Options, res *Result, index int, it plan.Item, started st
 		}
 		if err := os.WriteFile(envFile, data, 0o600); err != nil {
 			return failConda(opts, res, step, "写 environment.yml 失败: "+err.Error(), it.Name)
+		}
+		if err := os.WriteFile(specsFile, []byte(strings.Join(plan.CondaSpecLines(spec), "\n")+"\n"), 0o600); err != nil {
+			return failConda(opts, res, step, "写 specs.txt 失败: "+err.Error(), it.Name)
 		}
 		if b := conda.Condarc(spec.Profile); len(b) > 0 {
 			if err := os.WriteFile(condarc, b, 0o600); err != nil {
