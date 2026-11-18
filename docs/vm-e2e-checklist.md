@@ -171,6 +171,7 @@
 - [x] 已存在环境：第一次 update 成功后第二次 apply 为 skipped；只改 pip 开关时只跑 pip 阶段。
 - [x] 重叠：conda 环境同时有 numpy 的 conda 包与 pip 记录时，requirements.txt 不含 numpy；PipPackages 只保留非 conda 包。
 - [x] `--conda-packages=none`：所有 conda 环境条目 skipped，不影响软件/PATH 阶段。
+- [x] CLI 显式覆盖：fresh-scan 风格配置两个 per-env 开关均 false 时，不传 flag 为 skipped；`--conda-packages=conda` 生成 install 计划。
 - [ ] GUI：扫描页显示 conda 环境表；base 勾选框禁用；命名环境的 conda/pip 开关与镜像选择能写入配置；计划表显示 conda 层级与缺包数量。
 
 > 说明：缺包 unverified 使用 VM 内包装器注入（`conda list` 返回空，install 仍委托真实 conda）；其余 create/install/pip 均为真实 conda 操作。

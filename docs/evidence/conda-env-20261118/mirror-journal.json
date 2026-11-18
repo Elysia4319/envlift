@@ -1,0 +1,25 @@
+{
+  "app": "envlift",
+  "kind": "apply-journal",
+  "schema": 2,
+  "started_at": "2026-11-03T11:30:05+08:00",
+  "config_path": "conda-mirror-fail.yaml",
+  "steps": [
+    {
+      "index": 0,
+      "kind": "conda_env",
+      "name": "conda-mirror-fail测试",
+      "tier": "conda",
+      "command": "C:\\Miniconda3\\Scripts\\conda.exe create --yes --prefix \"C:\\My Apps\\conda-mirror-fail测试\" --override-channels -c conda-forge --file reports\\conda\\conda-mirror-fail测试\\environment.yml \u0026\u0026 \"C:\\My Apps\\conda-mirror-fail测试\\python.exe\" -m pip install --no-input --disable-pip-version-check -r reports\\conda\\conda-mirror-fail测试\\requirements.txt",
+      "needs_admin": false,
+      "expect_reboot": false,
+      "exit_code": 1,
+      "output": "$ C:\\Miniconda3\\Scripts\\conda.exe create --yes --prefix \"C:\\My Apps\\conda-mirror-fail测试\" --override-channels -c conda-forge --file reports\\conda\\conda-mirror-fail测试\\environment.yml\nWARNING conda.core.prefix_data:validate_path(345): Environment paths should not contain spaces. Prefix: 'C:\\My Apps\\conda-mirror-fail����'\r\nChannels:\r\n - conda-forge\r\nPlatform: win-64\r\nCollecting package metadata (repodata.json): ...working... done\r\nSolving environment: ...working... failed\r\nChannels:\r\n - conda-forge\r\nPlatform: win-64\r\nCollecting package metadata (repodata.json): ...working... done\r\nSolving environment: ...working... failed\r\n\r\nPackagesNotFoundInChannelsError: The following packages are not available from current channels:\r\n\r\n  - definitely-not-a-real-package-xyz\r\n\r\nCurrent channels:\r\n\r\n  - https://conda.anaconda.org/conda-forge\r\n\r\nTo search for alternate channels that may provide the conda package you're\r\nlooking for, navigate to\r\n\r\n    https://anaconda.org\r\n\r\nand use the search bar at the top of the page.\n环境不会自动删除；如需清理请手工运行: conda env remove --prefix \"C:\\My Apps\\conda-mirror-fail测试\"",
+      "status": "failed",
+      "started_at": "2026-11-03T11:30:05+08:00",
+      "finished_at": "2026-11-03T11:30:16+08:00"
+    }
+  ],
+  "finished": true,
+  "stopped_reason": "条目 conda-mirror-fail测试 执行失败（退出码 1），已停止并保留环境"
+}

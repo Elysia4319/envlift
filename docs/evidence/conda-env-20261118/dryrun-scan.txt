@@ -1,0 +1,91 @@
+envlift restore — 预演（未执行任何操作）
+配置 envlift.yaml · schema v2 · 生成于 2026-11-03T11:33:07+08:00
+
+环境预检
+  目标机      Windows 11 (build 26300) / amd64
+  用户        ${USER}@${HOST}
+  权限        管理员运行
+  winget      可用 v1.29.380
+  网络        可达
+  安装包      installers 下 0 个文件，命中 0 个配方 · 配方表 33 条
+
+执行计划（按执行顺序）
+   1. [runtime] git
+      层级 manual · 已识别配方 git，但 installers/ 中无匹配安装包
+   2. [runtime] node
+      层级 manual · 已识别配方 node，但 installers/ 中无匹配安装包
+   3. [runtime] go
+      层级 manual · 已识别配方 go，但 installers/ 中无匹配安装包
+   4. [software] Microsoft Edge
+      期望 157.0.4341.60 / 当前 -
+      层级 manual · 已识别配方 edge，但 installers/ 中无匹配安装包
+   5. [software] Miniconda3 py314_26.9.3-0 (Python 3.14.8 64-bit)
+      期望 py314_26.9.3-0 / 当前 -
+      层级 manual · 已识别配方 miniconda3，但 installers/ 中无匹配安装包
+   6. [software] Copilot
+      期望 157.0.4341.60 / 当前 -
+      层级 manual · 无 winget 包映射，且没有配方覆盖
+   7. [software] Microsoft OneDrive
+      期望 26.195.1006.0007 / 当前 -
+      层级 manual · 无 winget 包映射，且没有配方覆盖
+   8. [software] Microsoft Visual C++ 2015-2022 Redistributable (x86) - 14.40.33816
+      期望 14.40.33816.0 / 当前 -
+      层级 manual · 无 winget 包映射，且没有配方覆盖
+   9. [software] Microsoft Windows Application Compatibility Fix Database
+      层级 manual · 无 winget 包映射，且没有配方覆盖
+  10. [software] VMware Tools
+      期望 13.1.5.0 / 当前 -
+      层级 manual · 无 winget 包映射，且没有配方覆盖
+  11. [runtime] python
+      层级 跳过 · 已存在，版本一致
+  12. [runtime] java
+      层级 manual · 未安装，且没有配方覆盖
+  13. [runtime] cargo
+      层级 manual · 未安装，且没有配方覆盖
+  14. [runtime] dotnet
+      层级 manual · 未安装，且没有配方覆盖
+  15. [runtime] powershell
+      期望 5.1.26100.9444 / 当前 5.1.26100.9444
+      层级 跳过 · 已存在，版本一致
+  16. [conda_env] base
+      期望 3.14.8 / 当前 3.14.8
+      层级 manual · base 环境默认只读，不进入自动恢复列表
+      人工步骤 base 环境可能承载 conda 自身与用户全局工具；如确需修改，请手工运行 conda 命令
+  17. [conda_env] conda测试
+      期望 3.11.18 / 当前 3.11.18
+      层级 跳过 · 本次未选择恢复 conda 包或 pip 包
+
+PATH 变更
+  备份落点 reports/path-backup-20261103-113307.json（执行时生成，另有同名 .reg）
+  用户级
+    = %USERPROFILE%\AppData\Local\Microsoft\WindowsApps  (目标机已存在)
+    ! (空条目)  (空条目，不写入)
+  系统级
+    = %SystemRoot%\system32  (目标机已存在)
+    = %SystemRoot%  (目标机已存在)
+    = %SystemRoot%\System32\Wbem  (目标机已存在)
+    = %SYSTEMROOT%\System32\WindowsPowerShell\v1.0\  (目标机已存在)
+    = %SYSTEMROOT%\System32\OpenSSH\  (目标机已存在)
+
+待确认与风险
+  - git 需人工：需手工安装（已识别配方 git，但 installers/ 中无匹配安装包）
+  - node 需人工：需手工安装（已识别配方 node，但 installers/ 中无匹配安装包）
+  - go 需人工：需手工安装（已识别配方 go，但 installers/ 中无匹配安装包）
+  - Microsoft Edge 需人工：需手工安装（已识别配方 edge，但 installers/ 中无匹配安装包）
+  - Miniconda3 py314_26.9.3-0 (Python 3.14.8 64-bit) 需人工：需手工安装（已识别配方 miniconda3，但 installers/ 中无匹配安装包）
+  - Copilot 需人工：需手工安装（无 winget 包映射，且没有配方覆盖）
+  - Microsoft OneDrive 需人工：需手工安装（无 winget 包映射，且没有配方覆盖）
+  - Microsoft Visual C++ 2015-2022 Redistributable (x86) - 14.40.33816 需人工：需手工安装（无 winget 包映射，且没有配方覆盖）
+  - Microsoft Windows Application Compatibility Fix Database 需人工：需手工安装（无 winget 包映射，且没有配方覆盖）
+  - VMware Tools 需人工：需手工安装（无 winget 包映射，且没有配方覆盖）
+  - java 需人工：需手工安装（未安装，且没有配方覆盖）
+  - cargo 需人工：需手工安装（未安装，且没有配方覆盖）
+  - dotnet 需人工：需手工安装（未安装，且没有配方覆盖）
+  - base 需人工：base 环境可能承载 conda 自身与用户全局工具；如确需修改，请手工运行 conda 命令（base 环境默认只读，不进入自动恢复列表）
+  - PATH[user] (空条目)：空条目，不写入
+
+汇总
+  winget 0 · 本地包 0 · conda 0 · manual 14 · 跳过 3 · 待确认 0 · 因未决策跳过 0
+
+这是预演，未执行任何命令、未写入任何文件。
+确认无误后运行: envlift restore --apply

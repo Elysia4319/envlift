@@ -1,0 +1,57 @@
+正在只读扫描…
+
+系统信息
+  操作系统    Windows 11 26H2 (build 26300)
+  版本判定    build 26300 → Windows 11
+  注册表名    Windows 10 Home（与 build 判定不一致，仅作参考）
+  架构        amd64
+  用户名      ${USER}
+  主机名      ${HOST}
+  权限        管理员运行
+  winget      可用 v1.11.510
+  盘符        A:  C: Windows  D: CCCOMA_X64FRE_ZH-CN_DV9  E: AUTOUNATTEND
+
+PATH（用户级） 2 条 · 值类型 REG_EXPAND_SZ
+  [ 1] %USERPROFILE%\AppData\Local\Microsoft\WindowsApps
+  [ 2] (空条目)  [empty]
+
+PATH（系统级） 5 条 · 值类型 REG_EXPAND_SZ
+  [ 1] %SystemRoot%\system32
+  [ 2] %SystemRoot%
+  [ 3] %SystemRoot%\System32\Wbem
+  [ 4] %SYSTEMROOT%\System32\WindowsPowerShell\v1.0\  [trailing-backslash]
+  [ 5] %SYSTEMROOT%\System32\OpenSSH\  [trailing-backslash]
+
+语言运行时
+  python        unknown           -          user#0        C:\Users\${USER}\AppData\Local\Microsoft\WindowsApps\python.exe
+  node          unknown           -          -             -
+  java          unknown           -          -             -
+  go            unknown           -          -             -
+  cargo         unknown           -          -             -
+  git           unknown           -          -             -
+  dotnet        unknown           -          -             -
+  powershell    5.1.26100.9444    -          machine#3     C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe
+
+软件清单（三源合并）
+  原始 41 条 · 滤除 33 条（system_component 7 / no_name_no_uninstall 25 / no_display_name 1）
+  来源 uninstall 8 / winget 0 / app_paths 13
+  配方 33 条 · 已识别 2 · 未识别 5（其中有 winget id 的 0 条——这部分是配方缺口，其余本来就该 manual）
+
+  ── 未识别（5）──
+    Copilot                                               157.0.4341.60
+    Microsoft OneDrive                                    26.195.1006.0007
+    Microsoft Visual C++ 2015-2022 Redistributable (x86) - 14.40.33816  14.40.33816.0
+    Microsoft Windows Application Compatibility Fix Database  -
+    VMware Tools                                          13.1.5.0
+
+  ── 已识别（2）──
+    Microsoft Edge                                        157.0.4341.60  [alias → edge]
+    Miniconda3 py314_26.9.3-0 (Python 3.14.8 64-bit)      py314_26.9.3-0  [display_regex → miniconda3]
+
+conda 环境
+  base              只读          py=3.14.8  conda=146  pip=3  C:\Miniconda3
+  conda测试         跳过          py=3.11.18  conda=34  pip=5  C:\My Apps\conda测试
+
+已写入 envlift.yaml
+  PATH 7 条（用户 2 / 系统 5）· 运行时 8 个 · conda 环境 2 个 · 盘符 4 个
+  下一步: 审阅该文件，手工补全 drive_map.purpose；还原前请先运行 envlift restore（默认预演）。

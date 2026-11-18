@@ -1,0 +1,36 @@
+{
+  "envs": [
+    "C:\\Miniconda3",
+    "C:\\My Apps\\conda-create\u6d4b\u8bd5",
+    "C:\\My Apps\\conda\u6d4b\u8bd5"
+  ],
+  "envs_details": {
+    "C:\\Miniconda3": {
+      "name": "base",
+      "created": "2026-11-03T02:40:54.566910+00:00",
+      "last_modified": "2026-10-15T01:55:06+00:00",
+      "active": false,
+      "base": true,
+      "frozen": false,
+      "writable": true
+    },
+    "C:\\My Apps\\conda-create\u6d4b\u8bd5": {
+      "name": "conda-create\u6d4b\u8bd5",
+      "created": "2026-11-03T03:17:28.900207+00:00",
+      "last_modified": "2026-11-03T03:17:42.290488+00:00",
+      "active": false,
+      "base": false,
+      "frozen": false,
+      "writable": true
+    },
+    "C:\\My Apps\\conda\u6d4b\u8bd5": {
+      "name": "conda\u6d4b\u8bd5",
+      "created": "2026-11-03T02:56:26.771539+00:00",
+      "last_modified": "2026-11-03T03:34:55.739812+00:00",
+      "active": false,
+      "base": false,
+      "frozen": false,
+      "writable": true
+    }
+  }
+}

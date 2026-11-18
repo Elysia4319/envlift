@@ -1,0 +1,56 @@
+{
+  "report_schema": 1,
+  "kind": "restore-report",
+  "generated_at": "2026-11-03T11:34:58+08:00",
+  "config_path": "conda-unverified.yaml",
+  "journal": "reports\\.envlift-journal-20261103-113438.json",
+  "env": {
+    "os": "Windows 11",
+    "build": "26300",
+    "arch": "amd64",
+    "username": "${USER}",
+    "hostname": "${HOST}",
+    "winget_ok": true,
+    "network_ok": true,
+    "elevated": true
+  },
+  "plan_hash": "07192b0c37e24cba6a12ad6a1c82468cafebe4dfd2cf15bae7d8ebde03642168",
+  "mode": "apply",
+  "summary": {
+    "total": 1,
+    "succeeded": 0,
+    "skipped": 0,
+    "unverified": 1,
+    "manual": 0,
+    "blocked_needs_decision": 0,
+    "failed": 0,
+    "path_writes": 0,
+    "awaiting_reboot": false
+  },
+  "items": [
+    {
+      "target_id": "658597f5e2a3",
+      "kind": "conda_env",
+      "name": "conda测试",
+      "expected_version": "3.11.18",
+      "before_version": "3.11.18",
+      "tier": "conda",
+      "status": "unverified",
+      "command": "C:\\fakeconda.exe install --yes --prefix \"C:\\My Apps\\conda测试\" --override-channels -c conda-forge --file reports\\conda\\conda测试\\specs.txt",
+      "exit_code": 0,
+      "verify_result": "fail",
+      "failure_reason": "conda 包不完整: tabulate（缺失）",
+      "needs_admin": false,
+      "expect_reboot": false,
+      "reason": "缺 1 个 conda 包 / 0 个 pip 包，将更新环境；conda 缺包：tabulate（缺失）",
+      "verify_command_present": true
+    }
+  ],
+  "path_changes": [],
+  "warnings": [
+    "conda 临时文件保留在 reports\\conda\\conda测试，排查后可手工删除"
+  ],
+  "decisions": {
+    "apply_mode": "all"
+  }
+}

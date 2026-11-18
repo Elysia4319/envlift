@@ -81,6 +81,8 @@ go install github.com/Elysia4319/envlift/cmd/envlift@latest
 
 `scan` 会读取本机可发现的 conda 安装，采集命名环境的 conda 包（name / version / build / channel）与 pip 包（name / version）。默认过滤 pip / setuptools / wheel 等基础包；GUI 或 `--keep-pip-bootstrap` 可保留。base 默认只读，不进入自动恢复列表；所有环境默认 `restore_conda=false`、`restore_pip=false`，必须在 GUI 勾选或显式传 `--conda-packages` 才会执行。GUI 的扫描结果里可以逐个环境开关 conda / pip，并选择命名镜像 profile。
 
+CLI 的 `--conda-packages=conda|pip|both` 是**显式全局覆盖**：对非 base 环境忽略 `restore_conda` / `restore_pip`，直接按该范围执行；不传时默认 `none`，全部跳过。GUI 不使用全局覆盖，仍按每个环境的两个开关执行。
+
 `restore` 对 conda 环境使用独立层级 `conda`：
 
 - 环境不存在时生成 `environment.yml`，执行 `conda create --yes --prefix ... --override-channels -c ... --file environment.yml`。
@@ -133,9 +135,11 @@ go install github.com/Elysia4319/envlift/cmd/envlift@latest
 - runtime 条目暂不做注册表目录验证；同名多版本也可能只能标 `unverified`。
 - winget 缺 `--force` 时当前实现会阻止整个计划，而不只是跳过单个条目。
 - conda 恢复要求本机已有可用的 conda；envlift 不自动安装 Miniconda/Anaconda。
+- conda create/install 使用 `--file` 与 `--override-channels`，要求 conda 4.6+；本轮只在 26.9.3 验证，旧版 conda 未验证，不提供自动回退到 `conda env create/update`。
 - `environment.yml` 不写 pip 依赖，pip 包由 Phase 2 单独恢复；两阶段都失败时环境会保留，不自动删除。
 - 带 token 的私有 conda channel 会被脱敏存储，因而不能直接用于还原；需要改用不含凭据的本地/企业源。
 - conda 包版本/build 必须与清单匹配才算通过；只匹配名称不算。
+- base 环境仍记录完整 conda/pip 包清单，作为只读快照；它不参与自动恢复。
 - 这是 early alpha，接口、配置格式和 GUI 仍可能变化。
 
 ## 文档入口

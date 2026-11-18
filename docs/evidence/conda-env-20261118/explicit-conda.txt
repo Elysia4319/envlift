@@ -1,0 +1,36 @@
+envlift restore — 预演（未执行任何操作）
+配置 conda-explicit.yaml · schema v2 · 生成于 2026-11-18T15:17:45+08:00
+
+环境预检
+  目标机      Windows 11 (build 26300) / amd64
+  用户        ${USER}@${HOST}
+  权限        管理员运行
+  winget      可用 v1.29.380
+  网络        可达
+  安装包      installers 下 0 个文件，命中 0 个配方 · 配方表 33 条
+
+执行计划（按执行顺序）
+   1. [conda_env] conda测试
+      期望 3.11.18 / 当前 3.11.18
+      层级 conda
+      命令 C:\Miniconda3\Scripts\conda.exe install --yes --prefix "C:\My Apps\conda测试" --override-channels -c conda-forge --file reports\conda\conda测试\specs.txt
+      conda 包 1 / pip 包 0 · 缺 conda 1 / pip 0
+      校验 C:\Miniconda3\Scripts\conda.exe list --json --prefix "C:\My Apps\conda测试"
+      降级 失败不删除环境；按 journal 记录手工清理
+      说明 缺 1 个 conda 包 / 0 个 pip 包，将更新环境；conda 缺包：xlsxwriter（缺失）
+
+PATH 变更
+  备份落点 reports/path-backup-20261118-151745.json（执行时生成，另有同名 .reg）
+  用户级
+    （无）
+  系统级
+    （无）
+
+待确认与风险
+  （无）
+
+汇总
+  winget 0 · 本地包 0 · conda 1 · manual 0 · 跳过 0 · 待确认 0 · 因未决策跳过 0
+
+这是预演，未执行任何命令、未写入任何文件。
+确认无误后运行: envlift restore --apply

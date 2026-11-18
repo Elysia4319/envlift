@@ -1,0 +1,24 @@
+{
+  "app": "envlift",
+  "kind": "apply-journal",
+  "schema": 2,
+  "started_at": "2026-11-03T11:31:27+08:00",
+  "config_path": "conda-update.yaml",
+  "steps": [
+    {
+      "index": 0,
+      "kind": "conda_env",
+      "name": "conda测试",
+      "tier": "conda",
+      "command": "C:\\Miniconda3\\Scripts\\conda.exe install --yes --prefix \"C:\\My Apps\\conda测试\" --override-channels -c conda-forge --file reports\\conda\\conda测试\\specs.txt \u0026\u0026 \"C:\\My Apps\\conda测试\\python.exe\" -m pip install --no-input --disable-pip-version-check -r reports\\conda\\conda测试\\requirements.txt",
+      "needs_admin": false,
+      "expect_reboot": false,
+      "exit_code": 0,
+      "output": "$ C:\\Miniconda3\\Scripts\\conda.exe install --yes --prefix \"C:\\My Apps\\conda测试\" --override-channels -c conda-forge --file reports\\conda\\conda测试\\specs.txt\nChannels:\r\n - conda-forge\r\nPlatform: win-64\r\nCollecting package metadata (repodata.json): ...working... done\r\nSolving environment: ...working... done\r\n\r\n## Package Plan ##\r\n\r\n  environment location: C:\\My Apps\\conda����\r\n\r\n  added / updated specs:\r\n    - numpy=2.4.6\r\n    - openpyxl\r\n    - pandas\r\n    - pip\r\n    - python=3.11.18\r\n    - scipy\r\n\r\n\r\nThe following packages will be downloaded:\r\n\r\n    package                    |            build\r\n    ---------------------------|-----------------\r\n    et_xmlfile-2.0.0           |     pyhd8ed1ab_1          21 KB  conda-forge\r\n    openpyxl-3.1.5             |  py311h4d8bf61_5         479 KB  conda-forge\r\n    ------------------------------------------------------------\r\n                                           Total:         501 KB\r\n\r\nThe following NEW packages will be INSTALLED:\r\n\r\n  et_xmlfile         conda-forge/noarch::et_xmlfile-2.0.0-pyhd8ed1ab_1 \r\n  openpyxl           conda-forge/win-64::openpyxl-3.1.5-py311h4d8bf61_5 \r\n\r\n\r\n\r\nDownloading and Extracting Packages: ...working... done\r\nPreparing transaction: ...working... done\r\nVerifying transaction: ...working... done\r\nExecuting transaction: ...working... done\n---\n$ \"C:\\My Apps\\conda测试\\python.exe\" -m pip install --no-input --disable-pip-version-check -r reports\\conda\\conda测试\\requirements.txt\nRequirement already satisfied: requests==2.34.2 in C:\\My Apps\\conda����\\Lib\\site-packages (from -r reports\\conda\\conda����\\requirements.txt (line 2)) (2.34.2)\r\nRequirement already satisfied: rich in C:\\My Apps\\conda����\\Lib\\site-packages (from -r reports\\conda\\conda����\\requirements.txt (line 3)) (15.0.0)\r\nRequirement already satisfied: charset_normalizer\u003c4,\u003e=2 in C:\\My Apps\\conda����\\Lib\\site-packages (from requests==2.34.2-\u003e-r reports\\conda\\conda����\\requirements.txt (line 2)) (3.5.2)\r\nRequirement already satisfied: idna\u003c4,\u003e=2.5 in C:\\My Apps\\conda����\\Lib\\site-packages (from requests==2.34.2-\u003e-r reports\\conda\\conda����\\requirements.txt (line 2)) (3.20)\r\nRequirement already satisfied: urllib3\u003c3,\u003e=1.26 in C:\\My Apps\\conda����\\Lib\\site-packages (from requests==2.34.2-\u003e-r reports\\conda\\conda����\\requirements.txt (line 2)) (2.8.0)\r\nRequirement already satisfied: certifi\u003e=2023.5.7 in C:\\My Apps\\conda����\\Lib\\site-packages (from requests==2.34.2-\u003e-r reports\\conda\\conda����\\requirements.txt (line 2)) (2026.10.23)\r\nRequirement already satisfied: markdown-it-py\u003e=2.2.0 in C:\\My Apps\\conda����\\Lib\\site-packages (from rich-\u003e-r reports\\conda\\conda����\\requirements.txt (line 3)) (4.3.0)\r\nRequirement already satisfied: pygments\u003c3.0.0,\u003e=2.13.0 in C:\\My Apps\\conda����\\Lib\\site-packages (from rich-\u003e-r reports\\conda\\conda����\\requirements.txt (line 3)) (2.21.0)\r\nRequirement already satisfied: mdurl~=0.1 in C:\\My Apps\\conda����\\Lib\\site-packages (from markdown-it-py\u003e=2.2.0-\u003erich-\u003e-r reports\\conda\\conda����\\requirements.txt (line 3)) (0.1.2)",
+      "status": "ok",
+      "started_at": "2026-11-03T11:31:27+08:00",
+      "finished_at": "2026-11-03T11:32:01+08:00"
+    }
+  ],
+  "finished": true
+}

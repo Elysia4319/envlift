@@ -241,6 +241,8 @@ installers:
 
 `conda_envs` 记录只读扫描到的 conda 环境。base 默认 `restore_conda=false`、`restore_pip=false`，只作只读记录。
 
+base 仍保存完整 conda/pip 包清单，用于跨机器对比与审计；它不参与自动恢复，不因清单较大而截断。
+
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `name` | string | 是 | 环境名；base 固定为 `base` |
@@ -318,7 +320,7 @@ installers:
 
 conda 环境使用独立层级 `conda`，不复用 local/winget：
 
-默认 `--conda-packages=none`，所有 conda 环境条目跳过；GUI 的 conda/pip 复选框默认不勾选。只有显式选择范围并开启对应开关才执行。
+默认 `--conda-packages=none`，所有 conda 环境条目跳过；GUI 的 conda/pip 复选框默认不勾选。CLI 显式传 `--conda-packages=conda|pip|both` 时，对非 base 环境视为全局覆盖，忽略 `restore_conda` / `restore_pip`；GUI 不使用全局覆盖，仍按每个环境的两个开关执行。
 
 | 条件 | 状态 |
 |---|---|
@@ -332,6 +334,8 @@ conda 环境使用独立层级 `conda`，不复用 local/winget：
 恢复 conda 包时生成 `environment.yml` 与 `specs.txt`；恢复 pip 包时生成 `requirements.txt`。临时 `environment.yml` / `specs.txt` / `CONDARC` / `PIP_CONFIG_FILE` 放在 `reports/conda/<环境名>/` 下，成功后清理；失败或未验证时保留并写 warning。executor 通过环境变量注入临时配置，**不修改全局 `.condarc` / pip 配置**。
 
 执行后用 `conda list --json --prefix ...` 与 `<prefix>\python.exe -m pip list --format=json` 校验。缺包或版本/build 不符时状态为 `unverified`，不能报 `succeeded`。失败不自动删除环境；journal 记录手工清理命令。
+
+`conda create --file` / `conda install --file` / `--override-channels` 要求 conda 4.6+；本轮只在 26.9.3 验证。旧版 conda 未验证，不自动回退到 `conda env create/update`，因为后者会重新引入默认频道 ToS 与 `env update --yes` 兼容问题。
 
 ### 5.3 断网与源不可用（D7）
 
