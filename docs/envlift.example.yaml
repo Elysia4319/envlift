@@ -1,4 +1,4 @@
-# envlift 配置示例（schema v1）
+# envlift 配置示例（schema v2）
 #
 # 本文件全部是假数据：用户名、主机名、盘符用途、软件名均为虚构，可安全提交入库。
 # 用途有两个：① schema 参考；② 测试用的 golden file。
@@ -8,7 +8,7 @@
 #      --raw 导出的文件请务必用 *.raw.yaml 命名，该模式同样被忽略。
 
 app: envlift
-schema: 1
+schema: 2
 generated_at: '2026-01-01T00:00:00+08:00'
 
 source_machine:
@@ -80,6 +80,55 @@ software:
     sources: [registry]
     silent_capable: false
     manual_hint: '需厂商账号登录后安装'
+
+# conda 环境快照。base 默认只读；命名环境可按需恢复 conda 包与 pip 包。
+conda_envs:
+  - name: py311
+    prefix: 'C:\Users\${USER}\miniconda3\envs\py311'
+    manager: 'C:\Users\${USER}\miniconda3'
+    conda_exe: 'C:\Users\${USER}\miniconda3\Scripts\conda.exe'
+    conda_version: '26.9.3'
+    python_version: '3.11.9'
+    restore_conda: true
+    restore_pip: true
+    mirror: example-corp
+    packages:
+      - name: numpy
+        version: '1.26.4'
+        build: py311_0
+        channel: conda-forge
+      - name: python
+        version: '3.11.9'
+        build: h1
+        channel: conda-forge
+    pip_packages:
+      - name: requests
+        version: '2.31.0'
+  - name: base
+    prefix: 'C:\Users\${USER}\miniconda3'
+    manager: 'C:\Users\${USER}\miniconda3'
+    conda_exe: 'C:\Users\${USER}\miniconda3\Scripts\conda.exe'
+    conda_version: '26.9.3'
+    python_version: '3.12.1'
+    base: true
+    restore_conda: false
+    restore_pip: false
+    packages:
+      - name: python
+        version: '3.12.1'
+        build: h1
+        channel: conda-forge
+
+# 命名镜像 profile；envlift 不硬编码公共镜像。
+mirrors:
+  example-corp:
+    conda_channels:
+      - conda-forge
+    pip_index_url: 'https://pypi.example.invalid/simple'
+    pip_extra_index_url:
+      - 'https://mirror.example.invalid/simple'
+    pip_trusted_host:
+      - mirror.example.invalid
 
 installers:
   - name: example-editor

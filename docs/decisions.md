@@ -102,7 +102,7 @@
 
 ## D9 Schema
 
-`schema: 1` 整数主版本，配 `app: envlift` 与 `generated_at`。新增可选字段不升版本（读端忽略未知字段）；仅破坏性变更 +1。用户自定义字段一律 `x-` 前缀，读端无条件忽略。低于自身版本 → 链式迁移（v1→v2→…），迁移前备份原文件；高于自身版本 → 拒绝并提示升级 `envlift`，不做降级读取。
+`schema: 2` 整数主版本，配 `app: envlift` 与 `generated_at`。新增可选字段不升版本（读端忽略未知字段）；仅破坏性变更 +1。用户自定义字段一律 `x-` 前缀，读端无条件忽略。低于自身版本 → 链式迁移（v1→v2→…），迁移前备份原文件；高于自身版本 → 拒绝并提示升级 `envlift`，不做降级读取。
 
 **为什么这么定**：高版本拒绝而非降级读取，是因为降级读取会静默丢失语义——比如 v2 的 manual 项多了 `blocked_reason` 字段，v1 读端忽略它，就可能把「不可装」误判成「可装」。这种错误无声无息，比直接拒绝危险得多。
 
@@ -388,4 +388,22 @@ token → 请求体结构 → `mode` → 加载配置并生成计划 → `admin_
 **原因**：`target_id` 是条目身份，必须跨机器、跨重跑稳定。把目录纳入哈希会让同一条软件在指定目录后变成另一个条目，已有决策、报告 diff 与排除引用全部失效。目录是本次执行的参数，不是软件身份的一部分。
 
 **边界**：只使用配方显式声明的 `install_dir_arg` / `winget_location_arg`；不设置目录时，计划、命令与报告保持原样。指定目录视为重装，跳过 verify 幂等检查；winget 重装要求本机支持 `--force`，否则计划 blocked。当前版本不支持 `select{installer}` / `select{recipe}` 与 `set_location` 组合。Git 与 Notepad++ 的本地与 winget 目录参数尚未验证，内置配方不声明目录模板。重装成功后写入本地 `envlift.relocations.yaml`；同一 target_id + 归一化目录命中账本即跳过安装，不再依赖 verify。`verified=true` 不永久信任：apply 跳过前会重新读取 `InstallLocation`，目录不一致或读取失败时重新安装；`verified=false` 或无读取器时仍跳过，但报告必须标 `unverified`。账本同时保存 `install_dir` 与 `actual_dir`；账本不入库。`InstallLocation` 候选先按归一化路径去重；账本 `version` 高于当前程序支持时拒绝读取。
+
+---
+
+## D24 conda 环境升级：schema v2、独立层级与两阶段恢复
+
+**决定**：
+
+1. schema 升到 v2，新增 `conda_envs[]` 与 `mirrors{}`；v1 配置可读并备份后迁移，v2 旧二进制按 D9 拒绝。
+2. 新增 `internal/conda` 包，conda/pip 命令、文件系统与发现路径全部接口化；单测不调用真实 conda。
+3. 扫描只采集命名环境；base 记录但默认 `restore_conda=false`、`restore_pip=false`。同机多个 conda 安装分别记录，同名环境在 plan 阶段标 `needs-disambiguation`。
+4. conda 包与 pip 包分两阶段恢复：conda 先 `environment.yml`，pip 后 `requirements.txt`；`--conda-packages=conda|pip|both|none` 控制范围，GUI 每个环境另有独立开关。
+5. conda 使用独立层级 `conda`，不复用 local/winget；`base` 为 manual/只读。环境不存在用 create，存在且有缺包用 update，不用 `--prune`；包匹配才 skipped。
+6. 临时 `CONDARC` / `PIP_CONFIG_FILE` 放在 `reports/conda/<环境名>/`，通过 Executor 的环境变量注入，执行后清理；不修改全局 `.condarc` 或 pip 配置。
+7. 镜像只做命名 profile，不硬编码公共源；URL 中的 userinfo / token / password 拒绝保存或脱敏。默认 HTTPS，HTTP 必须显式 `trusted-host`。不自动接受 conda ToS，不从 HTTP/Git 静默安装，不自动 trusted-host。
+8. 执行后必须用 `conda list` / `pip list` 校验；缺包或版本/build 不符标 `unverified`，不能报 `succeeded`。失败不自动删除环境，journal 给出手工清理提示。
+9. conda/pip 包视为可执行代码；manifest 必须由用户信任。`target_id` 只用环境名 + Python 版本，不用 prefix，避免换机/换用户名后身份漂移。
+
+**为什么**：conda 环境不是单个安装包，create/update、包清单、pip 与镜像注入、失败保留策略都不同；塞进 local/winget 会让层级语义和报告失真。base 往往承载 conda 自身，自动修改风险高，默认只读。先 conda 后 pip 是因为 pip 依赖环境的 Python 与编译工具链；临时配置注入是为了不污染用户全局源配置。
 

@@ -30,9 +30,10 @@ GUI、代码签名、联网上传与同步、自动推断静默安装参数、�
 ## 2. 命令与参数
 
 ```
-envlift scan    [--out <path>] [--raw] [--overwrite] [--yes]
+envlift scan    [--out <path>] [--raw] [--overwrite] [--yes] [--keep-pip-bootstrap]
 envlift restore [--config <path>] [--apply] [--yes]
                 [--plan-out <file>] [--installers <dir>]
+                [--conda-packages conda|pip|both|none]
                 [--decisions <file>]
                 [--from-user <old>] [--from-host <old>]
 envlift version
@@ -46,29 +47,31 @@ envlift help
 | `scan --raw` | 关闭 | 关闭脱敏（用户名、主机名原样输出）。**启用时打印显式警告**，建议配 `--out *.raw.yaml` |
 | `scan --overwrite` | 关闭 | 目标文件已存在时覆盖（先备份为 `.bak`）。**不加则拒绝写入** |
 | `scan --yes` | 关闭 | 跳过「是否写入」确认，但**不绕过**已存在文件的保护 |
+| `scan --keep-pip-bootstrap` | 关闭 | 保留 pip / setuptools / wheel / distribute 等基础 pip 包；默认过滤 |
 | `restore` | — | **默认即 dry-run**：打印逐条命令、副作用、需提权项，然后退出 |
 | `restore --apply` | 关闭 | 真正执行。**仅表示「不是 dry-run」，不代表已授权提权** |
 | `restore --config` | `./envlift.yaml` | 配置文件路径 |
 | `restore --yes` | 关闭 | 跳过**无需提权**的确认。**绝不静默批准提权** |
 | `restore --plan-out` | 关闭 | 把计划写成 JSON（显式要求才落盘，dry-run 默认零写入） |
 | `restore --installers` | `./installers` | 本地安装包目录 |
+| `restore --conda-packages` | `both` | conda 环境恢复范围：只恢复 conda 包、只恢复 pip 包、两者或都不恢复 |
 | `restore --decisions` | 配置同目录的 `envlift.decisions.yaml`（存在则加载） | 决策文件；显式指定但读不到 → 直接报错，不当成「没有决策」 |
 | `restore --from-user` | 空 | `--raw` 配置中的原用户名，显式要求才重写 |
 | `restore --from-host` | 空 | `--raw` 配置中的原主机名 |
 | `version` / `help` | — | — |
 
-**退出码**：`0` 全部完成；`1` 出错中止；`2` 完成但有降级 / 替代 / 跳过 / 待人工项（含**因未决策被跳过**的项），或计划被阻止（依赖环）。数据类待确认不再阻断整批执行（C2 / D17）。
+**退出码**：`0` 全部完成；`1` 出错中止；`2` 完成但有降级 / 替代 / 跳过 / 待人工 / 未验证项（含**因未决策被跳过**的项），或计划被阻止（依赖环）。数据类待确认不再阻断整批执行（C2 / D17）。
 
 ---
 
-## 3. 配置文件 schema v1
+## 3. 配置文件 schema v2
 
 ### 3.1 顶层字段
 
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `app` | string | 是 | 固定 `envlift` |
-| `schema` | int | 是 | 当前为 `1`。规则见 §3.7 |
+| `schema` | int | 是 | 当前为 `2`。规则见 §3.7；v1 配置可读并自动迁移 |
 | `generated_at` | string (RFC3339) | 是 | 扫描时间 |
 | `source_machine` | object | 是 | 来源机器信息，见下 |
 | `drive_map` | map[string]object | 否 | 盘符 → `{label, purpose}`。**仅作还原判断的元信息，不承担脱敏职责** |
@@ -76,6 +79,8 @@ envlift help
 | `runtimes` | []object | 是 | 语言运行时 |
 | `software` | []object | 是 | 已装软件 |
 | `installers` | []object | 否 | 安装配方 |
+| `conda_envs` | []object | 否 | conda 命名环境快照，见 §3.8 |
+| `mirrors` | map[string]object | 否 | 命名镜像 profile，见 §3.8 |
 | `x-*` | any | 否 | 用户自定义字段，读端无条件忽略 |
 
 **`x-excluded`（A2）**：扫描/写盘时被显式排除的软件条目**原样**写在这个区里。它们是完整快照的一部分，只是不参与还原；`x-` 前缀读端无条件忽略（D9），因此将来想找回某条被排除的软件，信息还在。**默认不存在**——不排除时行为与「忠实快照」完全一致。
@@ -105,7 +110,7 @@ envlift help
 
 保留原始顺序与来源分段；重复项、空项、多余引号、尾部反斜杠、失效路径**只在终端预览里标注，不静默改写、不删除**。
 
-> **schema v1 修订记录**：本字段在实现第 ② 步时由 `[]string` 改为 `[]PathEntry`，因为需要逐条记录 `REG_EXPAND_SZ` 标记。v1 尚未对外发布、无存量配置文件，故未升 schema 版本；`docs/envlift.example.yaml` 与本表已同步。
+> **schema v1 修订记录**：本字段在实现第 ② 步时由 `[]string` 改为 `[]PathEntry`，因为需要逐条记录 `REG_EXPAND_SZ` 标记。v1 尚未对外发布、无存量配置文件，故未升 schema 版本；v2 起 `conda_envs` / `mirrors` 为新增可选字段，`docs/envlift.example.yaml` 与本表已同步。
 
 ### 3.3 `runtimes`
 
@@ -156,7 +161,7 @@ envlift help
 
 ```yaml
 app: envlift
-schema: 1
+schema: 2
 generated_at: '2026-10-27T10:05:00+08:00'
 
 source_machine:
@@ -227,10 +232,31 @@ installers:
 
 ### 3.7 版本与迁移（D9）
 
-- `schema` 为整数主版本，**仅破坏性变更 +1**；新增可选字段不升版本。
+- `schema` 为整数主版本，**仅破坏性变更 +1**；新增可选字段通常不升版本。v2 是例外：conda 环境是可执行恢复面，旧二进制会静默忽略，按 D24 升版本。
 - 读端忽略未知字段，并在回写时**保留**未知字段（含 `x-*`）。
 - `schema` < 本程序支持版本 → 链式迁移，**迁移前备份原文件**为 `envlift.yaml.bak`。
 - `schema` > 本程序支持版本 → **拒绝加载**，提示升级 `envlift`。
+
+### 3.8 `conda_envs` 与 `mirrors`（schema v2）
+
+`conda_envs` 记录只读扫描到的 conda 环境。base 默认 `restore_conda=false`、`restore_pip=false`，只作只读记录。
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `name` | string | 是 | 环境名；base 固定为 `base` |
+| `prefix` | string | 是 | 环境前缀；导出时脱敏 `${USER}` / `${HOST}` |
+| `manager` | string | 否 | conda 安装根目录，用于区分多个 conda 安装 |
+| `conda_exe` | string | 否 | 扫描到的 conda 可执行文件 |
+| `conda_version` | string | 否 | `conda info --json` 的版本 |
+| `python_version` | string | 否 | conda 包列表中 `python` 的版本 |
+| `base` | bool | 否 | 是否 base 环境 |
+| `restore_conda` | bool | 否 | 是否恢复 conda 包；缺省 true（base 除外） |
+| `restore_pip` | bool | 否 | 是否恢复 pip 包；缺省 true（base 除外） |
+| `mirror` | string | 否 | 引用 `mirrors` 的 profile 名；空表示默认源 |
+| `packages` | []object | 否 | `{name, version, build, channel}`；channel URL 中的凭据会被脱敏 |
+| `pip_packages` | []object | 否 | `{name, version}`；默认过滤 pip / setuptools / wheel / distribute |
+
+`mirrors` 的键是 profile 名，值支持 `conda_channels`、`pip_index_url`、`pip_extra_index_url`、`pip_trusted_host`。envlift **不硬编码**任何公共镜像；profile 由用户显式配置。URL 中出现 userinfo 或敏感查询参数（token / password / key 等）时拒绝保存；默认只允许 HTTPS，HTTP 必须显式加入 `pip_trusted_host`。
 
 ---
 
@@ -287,6 +313,23 @@ installers:
 | `winget_id` 非空 且 winget 可用 且 网络可用 | `winget` |
 | `installers\` 中有文件匹配某配方 `match` | `local` |
 | 以上都不满足 | `manual` |
+
+### 5.2.1 conda 环境定级
+
+conda 环境使用独立层级 `conda`，不复用 local/winget：
+
+| 条件 | 状态 |
+|---|---|
+| `base=true` | `manual`，只读，不自动修改 |
+| 配置里同名环境多于一个 | `needs-disambiguation`，不自动执行 |
+| 目标机不存在 | `planned`，执行 `conda env create --prefix ... --file environment.yml` |
+| 目标机存在且有缺包 | `planned`，执行 `conda env update --prefix ... --file ...`（不用 `--prune`） |
+| conda/pip 包都已匹配 | `skipped` |
+| 只启用 pip 且环境不存在 | `manual`，因为不能只靠 pip 创建环境 |
+
+恢复 conda 包时生成 `environment.yml`；恢复 pip 包时生成 `requirements.txt`。临时 `CONDARC` 与 `PIP_CONFIG_FILE` 放在 `reports/conda/<环境名>/` 下，成功后清理；失败或未验证时保留并写 warning。executor 通过环境变量注入临时配置，**不修改全局 `.condarc` / pip 配置**。
+
+执行后用 `conda list --json --prefix ...` 与 `<prefix>\python.exe -m pip list --format=json` 校验。缺包或版本/build 不符时状态为 `unverified`，不能报 `succeeded`。失败不自动删除环境；journal 记录手工清理命令。
 
 ### 5.3 断网与源不可用（D7）
 
@@ -392,7 +435,7 @@ installers:
   "mode": "dry-run",
   "summary": {
     "total": 0, "succeeded": 0, "skipped": 0, "manual": 0,
-    "blocked_needs_decision": 0, "failed": 0, "path_writes": 0,
+    "unverified": 0, "blocked_needs_decision": 0, "failed": 0, "path_writes": 0,
     "awaiting_reboot": false
   },
   "items": [
@@ -651,4 +694,6 @@ apply 开始时**重新探测** winget 可用性与网络状态；与 dry-run �
 **鉴权边界（D16）**：静态资源不鉴权，`/api/` 一律只认 `X-Envlift-Token` 请求头，任何响应都不下发 `Set-Cookie`（断言见 `internal/webui/server_test.go`）。
 
 自动化验证脚本在 `scripts/ui-check/`（Playwright 驱动系统已装的 Edge/Chrome）：三页冒烟、轮询增量（假 API）、三档宽度布局自检。
+
+**conda 面板**：扫描结果新增 conda 环境表，显示环境名、Python 版本、前缀、conda/pip 包数量、两个恢复开关与镜像选择。base 行只读；命名环境可分别关闭 conda/pip。提交扫描时，GUI 只回传开关与 mirror 名，不回传路径或包列表；服务端按 `name + manager` 匹配，匹配不到直接报错。
 

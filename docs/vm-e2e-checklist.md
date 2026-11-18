@@ -4,7 +4,7 @@
 > 或误以为已经验过。
 > 本机（开发机）**永远不跑装软件的真实 apply**——本机装软件属于不可回滚的副作用。
 >
-> 配套文档：怎么改 / 怎么验 → `docs/workflow.md`；已锁定决策（D1–D23）→ `docs/decisions.md`。
+> 配套文档：怎么改 / 怎么验 → `docs/workflow.md`；已锁定决策（D1–D24）→ `docs/decisions.md`。
 
 ## 0. 环境准备
 
@@ -151,6 +151,27 @@
 > 场景 5 只能用 `6CFCA6...` 历史结果，不能写成最终二进制通过。
 > 第 124 行保持未勾选：安装目录变更不提供自动卸载回滚；PATH 回滚本轮未重跑，
 > 沿用 2026-11-03 F7 结果。
+
+## 13. conda 环境（2026-11-18，未执行 VM）
+
+> 本轮只完成代码与单测；以下 VM 场景全部保持未勾选，不能用单测结果代替真机验证。
+
+- [ ] 干净 VM 安装 Miniconda；创建一个命名环境：`conda-forge` 的 numpy + pip 的 requests；再建一个 base 环境。
+- [ ] `scan`：确认只采集命名环境的 conda/pip 包；base 标只读；prefix 含空格/中文时不丢字符；不同 conda 安装分别记录。
+- [ ] `scan`：确认 pip/setuptools/wheel 默认过滤；开启保留选项后能看到基础包。
+- [ ] `restore` dry-run：base 为 `manual`；命名环境不存在时计划 `conda` 层级 create；存在且缺包时 update；包匹配时 skipped。
+- [ ] apply：`conda env create --prefix ... --file environment.yml` 成功；`conda env list --json` 能看到新环境。
+- [ ] apply：`conda env update` 不删除已有包（无 `--prune`）；`conda list` 校验通过后才显示 succeeded。
+- [ ] apply：pip 阶段使用 `<prefix>\python.exe -m pip install -r requirements.txt`；`pip list` 校验通过。
+- [ ] 镜像：配置命名 profile 后，临时 `CONDARC` / `PIP_CONFIG_FILE` 生效；全局 `.condarc` 未被修改；执行后临时文件清理。
+- [ ] 安全：HTTP 源未配置 trusted-host 时拒绝；URL token/密码不落入配置；不自动接受 conda ToS。
+- [ ] 失败注入：让 conda create 失败，确认环境不自动删除、journal 有手工清理提示、报告不显示 succeeded。
+- [ ] 缺包注入：让 conda 或 pip 少装一个包，确认报告状态为 `unverified`，不是 `succeeded`。
+- [ ] 已存在环境：第一次 update 成功后第二次 apply 为 skipped；只改 pip 开关时只跑 pip 阶段。
+- [ ] `--conda-packages=none`：所有 conda 环境条目 skipped，不影响软件/PATH 阶段。
+- [ ] GUI：扫描页显示 conda 环境表；base 勾选框禁用；命名环境的 conda/pip 开关与镜像选择能写入配置；计划表显示 conda 层级与缺包数量。
+
+> 本机（开发机）只做只读探测与单测；真实 conda create/update/pip install 必须放 VM。
 
 ## 12. VM 执行顺序（F0–F8，按序勾选，每场景单独记录）
 

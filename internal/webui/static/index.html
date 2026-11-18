@@ -81,6 +81,10 @@
             <input type="checkbox" id="scan-raw">
             <span class="hint">保留真实用户名/主机名（--raw，导出文件不要进 git）</span>
           </label>
+          <label class="field">
+            <input type="checkbox" id="scan-keep-pip-bootstrap">
+            <span class="hint">保留 pip/setuptools/wheel 基础包</span>
+          </label>
           <button class="btn" id="btn-scan" type="button">开始扫描</button>
           <button class="btn btn-ghost" id="btn-scan-cancel" type="button" hidden>取消</button>
         </div>
