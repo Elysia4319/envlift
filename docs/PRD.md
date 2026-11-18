@@ -335,7 +335,7 @@ conda 环境使用独立层级 `conda`，不复用 local/winget：
 
 恢复 conda 包时生成 `environment.yml` 与 `specs.txt`；恢复 pip 包时生成 `requirements.txt`。临时 `environment.yml` / `specs.txt` / `CONDARC` / `PIP_CONFIG_FILE` 放在 `reports/conda/<环境名>/` 下，成功后清理；失败或未验证时保留并写 warning。executor 通过环境变量注入临时配置，**不修改全局 `.condarc` / pip 配置**。
 
-执行后用 `conda list --json --prefix ...` 与 `<prefix>\python.exe -m pip list --format=json` 校验。缺包或版本/build 不符时状态为 `unverified`，不能报 `succeeded`。失败不自动删除环境；journal 记录手工清理命令。
+执行后用 `conda list --json --prefix ...` 与 `<prefix>\python.exe -m pip list --format=json` 校验。缺包或版本/build 不符时状态为 `unverified`，不能报 `succeeded`。conda 环境的 `actual_version` 取 `conda list` 中 `python` 包的版本。失败不自动删除环境；journal 记录手工清理命令。
 
 `conda create --file` / `conda install --file` / `--override-channels` **只验证 conda 26.9.3**；不声明旧版 conda 支持，旧版未验证，不自动回退到 `conda env create/update`，因为后者会重新引入默认频道 ToS 与 `env update --yes` 兼容问题。
 

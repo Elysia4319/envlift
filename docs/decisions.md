@@ -402,7 +402,7 @@ token → 请求体结构 → `mode` → 加载配置并生成计划 → `admin_
 5. conda 使用独立层级 `conda`，不复用 local/winget；`base` 为 manual/只读。环境不存在用 `conda create --file environment.yml`，存在且有缺包用 `conda install --file specs.txt`；两者都显式 `--override-channels -c ...`，不自动接受 ToS，不用 `--prune`；包匹配才 skipped。仅验证 conda 26.9.3，不声明旧版支持。
 6. 临时 `CONDARC` / `PIP_CONFIG_FILE` 放在 `reports/conda/<环境名>/`，通过 Executor 的环境变量注入，执行后清理；不修改全局 `.condarc` 或 pip 配置。
 7. 镜像只做命名 profile，不硬编码公共源；`MirrorProfile` 不包含 `channel_alias` / `default_channels`，不自动读取或迁移源机器的 `.condarc` / pip 配置。URL 中的 userinfo / token / password 拒绝保存或脱敏。默认 HTTPS，HTTP 必须显式 `trusted-host`。不自动接受 conda ToS，不从 HTTP/Git 静默安装，不自动 trusted-host。
-8. 执行后必须用 `conda list` / `pip list` 校验；缺包或版本/build 不符标 `unverified`，不能报 `succeeded`。失败不自动删除环境，journal 给出手工清理提示。
+8. 执行后必须用 `conda list` / `pip list` 校验；缺包或版本/build 不符标 `unverified`，不能报 `succeeded`。conda 环境的 `actual_version` 取 `conda list` 里 `python` 包的版本，不从 verify stdout 猜。失败不自动删除环境，journal 给出手工清理提示。
 9. conda/pip 包视为可执行代码；manifest 必须由用户信任。`target_id` 只用环境名 + Python 版本，不用 prefix，避免换机/换用户名后身份漂移。
 
 **为什么**：conda 环境不是单个安装包，create/update、包清单、pip 与镜像注入、失败保留策略都不同；塞进 local/winget 会让层级语义和报告失真。base 往往承载 conda 自身，自动修改风险高，默认只读。先 conda 后 pip 是因为 pip 依赖环境的 Python 与编译工具链；临时配置注入是为了不污染用户全局源配置。
