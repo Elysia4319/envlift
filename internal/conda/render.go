@@ -223,11 +223,11 @@ func PipConfig(profile *config.MirrorProfile) []byte {
 	if profile.PipIndexURL != "" {
 		b.WriteString("index-url = " + profile.PipIndexURL + "\n")
 	}
-	for _, u := range profile.PipExtraIndex {
-		b.WriteString("extra-index-url = " + u + "\n")
+	if len(profile.PipExtraIndex) > 0 {
+		b.WriteString("extra-index-url = " + strings.Join(profile.PipExtraIndex, " ") + "\n")
 	}
-	for _, h := range profile.PipTrustedHost {
-		b.WriteString("trusted-host = " + h + "\n")
+	if len(profile.PipTrustedHost) > 0 {
+		b.WriteString("trusted-host = " + strings.Join(profile.PipTrustedHost, " ") + "\n")
 	}
 	b.WriteString("disable-pip-version-check = true\n")
 	return []byte(b.String())

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -227,16 +228,56 @@ func TestFilterPipBootstrapOption(t *testing.T) {
 
 func TestPipConfigMultipleExtraIndexURLs(t *testing.T) {
 	p := &config.MirrorProfile{
-		PipIndexURL:   "https://pypi.example/simple",
-		PipExtraIndex: []string{"https://a.example/simple", "https://b.example/simple"},
+		PipIndexURL:    "https://pypi.example/simple",
+		PipExtraIndex:  []string{"https://a.example/simple", "https://b.example/simple"},
+		PipTrustedHost: []string{"a.example", "b.example"},
 	}
 	cfg := string(PipConfig(p))
-	if strings.Count(cfg, "extra-index-url = ") != 2 {
-		t.Fatalf("应写两行 extra-index-url: %s", cfg)
+	if strings.Count(cfg, "extra-index-url = ") != 1 {
+		t.Fatalf("extra-index-url 只能出现一次（pip 不接受重复键）: %s", cfg)
 	}
-	for _, want := range []string{"a.example", "b.example"} {
+	if strings.Count(cfg, "trusted-host = ") != 1 {
+		t.Fatalf("trusted-host 只能出现一次（pip 不接受重复键）: %s", cfg)
+	}
+	for _, want := range []string{"https://a.example/simple https://b.example/simple", "a.example b.example"} {
 		if !strings.Contains(cfg, want) {
 			t.Fatalf("PipConfig 缺少 %s: %s", want, cfg)
 		}
+	}
+}
+
+func TestPipConfigParsedByRealPip(t *testing.T) {
+	py, err := exec.LookPath("python")
+	if err != nil {
+		t.Skip("未找到 python，跳过真实 pip 解析测试")
+	}
+	p := &config.MirrorProfile{
+		PipIndexURL:    "https://pypi.example/simple",
+		PipExtraIndex:  []string{"https://a.example/simple", "https://b.example/simple"},
+		PipTrustedHost: []string{"a.example", "b.example"},
+	}
+	path := filepath.Join(t.TempDir(), "pip.ini")
+	if err := os.WriteFile(path, PipConfig(p), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, py, "-m", "pip", "config", "list")
+	cmd.Env = append(os.Environ(),
+		"PIP_CONFIG_FILE="+path,
+		"PIP_DISABLE_PIP_VERSION_CHECK=1",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("pip config list 失败: %v\n%s", err, out)
+	}
+	s := string(out)
+	for _, want := range []string{"extra-index-url", "a.example", "b.example", "trusted-host"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("pip 未加载 %q:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "already exists") {
+		t.Fatalf("pip 仍报重复键:\n%s", s)
 	}
 }
