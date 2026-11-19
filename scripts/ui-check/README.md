@@ -42,7 +42,7 @@ python scripts\ui-check\decisions_check.py 'http://127.0.0.1:18082/?token=...' s
 - `run_ui_check.py` 会**真的扫一遍本机**（只读：注册表 + `winget list`），耗时十几秒到一分钟。
 - 这些脚本**不执行任何安装**：③ 步的「执行还原」按钮是禁用的，脚本也只断言它禁用。
 - `decisions_check.py` 需要服务进程的工作目录里有可读的 `envlift.yaml`（仓库里 `envlift.yaml` 被 gitignore，worktree 默认没有）。脚本启动时先调 `/api/v1/config/load` 做前置检查，缺失会立刻报错并提示放置位置或改用 `--config=<路径>`，不会干等 180s 超时。
-- `decisions_check.py` 的夹具**只改 `/api/v1/plan` 的响应**：把真实计划扩成 60 条 `needs_admin` 项，并在命令后追加 `--ui-check-ellipsis` 标记用于证明夹具生效。它不伪造 `/api/v1/apply`，不点「执行还原」，不执行任何安装。
+- `decisions_check.py` 的夹具**只改 `/api/v1/plan` 的响应**：把真实计划扩成 60 条 `needs_admin` 项，并在命令后追加 `--ui-check-ellipsis` 标记用于证明夹具生效。等待条件也是「带标记的命令 == 60 条」，不能只等数量——真实计划本身就可能已有 60 条 `needs_admin`，旧 DOM 会立刻满足数量条件，导致断言读到旧列表。它不伪造 `/api/v1/apply`，不点「执行还原」，不执行任何安装。
 - 1360 视口下侧栏占 262px，命令区约 762px，夹具命令能整行放下；因此「单行省略/展开」断言固定在 820 视口执行，1360 只验证布局与按钮状态。
 - 截图落到 `shots/`，该目录不进版本库。
 - **改完 `app.js` 先跑 `node --check internal/webui/static/app.js`**：embed 只关心字节，

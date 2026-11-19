@@ -116,16 +116,33 @@ def expand_plan(page):
 
 
 def wait_fixture(page, count=LONG_ADMIN_COUNT, problems=None, timeout=180000):
-    """等长列表渲染出来；夹具注入失败时立刻报错，不干等超时。"""
+    """等夹具真正渲染出来；夹具注入失败时立刻报错，不干等超时。
+
+    只等 .cf-admin-check 的数量是不够的：真实计划本身就可能已经有 60 条
+    needs_admin，旧 DOM 会立刻满足条件，随后断言标记时读到的还是旧列表
+    （marked=0/60）。这里必须以夹具标记出现为准。
+    """
+    script = """arg => {
+        const {mark, n} = arg;
+        const cmds = [...document.querySelectorAll('.cf-admin-cmd')];
+        const marked = cmds.filter(
+            e => (e.textContent + ' ' + (e.title || '')).includes(mark)
+        ).length;
+        const checks = document.querySelectorAll('.cf-admin-check').length;
+        return marked === n && checks === n;
+    }"""
     try:
         page.wait_for_function(
-            "n => document.querySelectorAll('.cf-admin-check').length === n",
-            arg=count,
+            script,
+            arg={"mark": FIXTURE_MARK, "n": count},
             timeout=timeout,
         )
     except Exception as e:  # noqa: BLE001
         if problems:
-            raise SystemExit("夹具注入失败，页面没有渲染 %d 条管理员项: %s" % (count, problems))
+            raise SystemExit(
+                "夹具注入失败，页面没有渲染 %d 条带 %s 的管理员项: %s"
+                % (count, FIXTURE_MARK, problems)
+            )
         raise
 
 
@@ -143,6 +160,16 @@ def row_layout(page):
                 clientW: document.scrollingElement.clientWidth,
             };
         }"""
+    )
+
+
+def fixture_marked(page):
+    """返回当前 DOM 里带夹具标记的命令条数。"""
+    return page.evaluate(
+        """mark => [...document.querySelectorAll('.cf-admin-cmd')]
+                   .filter(e => (e.textContent + ' ' + (e.title || '')).includes(mark))
+                   .length""",
+        FIXTURE_MARK,
     )
 
 
@@ -275,11 +302,7 @@ def main():
         assert not fixture_problems, "夹具注入失败: %s" % fixture_problems
 
         # 证明夹具真的进了页面：60 条数量可能是真实计划碰巧凑出来的，标记不会。
-        cmds = panel.locator(".cf-admin-cmd")
-        marked = cmds.evaluate_all(
-            "els => els.filter(e => (e.textContent + ' ' + (e.title || '')).includes('%s')).length"
-            % FIXTURE_MARK
-        )
+        marked = fixture_marked(page)
         assert marked == LONG_ADMIN_COUNT, "夹具标记只出现在 %d/%d 条命令里" % (marked, total)
         print("夹具生效：%d/%d 条命令带 %s" % (marked, total, FIXTURE_MARK))
 
@@ -373,9 +396,11 @@ def main():
         wait_fixture(sticky, problems=sticky_problems)
         sticky.wait_for_timeout(300)
         assert not sticky_problems, "sticky 页夹具注入失败: %s" % sticky_problems
-        assert sticky.locator(".cf-admin-cmd").first.evaluate(
-            "e => (e.textContent + ' ' + (e.title || '')).includes('%s')" % FIXTURE_MARK
-        ), "sticky 页用的不是夹具计划"
+        sticky_marked = fixture_marked(sticky)
+        assert sticky_marked == LONG_ADMIN_COUNT, (
+            "sticky 页只有 %d/%d 条命令带夹具标记" % (sticky_marked, LONG_ADMIN_COUNT)
+        )
+        print("sticky 页夹具：%d/%d 条命令带 %s" % (sticky_marked, LONG_ADMIN_COUNT, FIXTURE_MARK))
         foot = sticky.locator("#confirm-panel .cf-foot")
         assert foot.evaluate("e => getComputedStyle(e).position") == "sticky", ".cf-foot 未生效 sticky"
         sticky.evaluate(
@@ -397,10 +422,13 @@ def main():
 
         # skip_admin：切换后必须要求 ack，且提权清单隐藏
         panel.locator("#cf-mode-skip").check()
+        assert panel.locator("#cf-admin").is_hidden(), "skip_admin 应隐藏管理员列表"
+        assert panel.locator(".cf-ack").is_visible(), "skip_admin 应显示 ack"
         assert btn.is_disabled(), "skip_admin 未 ack 时不该放行"
         panel.locator("#cf-ack-skip").check()
         assert btn.is_enabled(), "skip_admin + ack 后应可执行"
         panel.locator("#cf-mode-all").check()
+        assert panel.locator("#cf-admin").is_visible(), "切回 all 应恢复管理员列表"
 
         page.screenshot(path=os.path.join(OUT, "decisions-confirm.png"), full_page=True)
 
