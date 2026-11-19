@@ -1,5 +1,5 @@
 envlift restore — 预演（未执行任何操作）
-配置 conda-unverified-fixed.yaml · schema v2 · 生成于 2026-11-18T15:49:33+08:00
+配置 conda-unverified4.yaml · schema v2 · 生成于 2026-11-19T20:24:37+08:00
 
 环境预检
   目标机      Windows 11 (build 26300) / amd64
@@ -10,17 +10,17 @@ envlift restore — 预演（未执行任何操作）
   安装包      installers 下 0 个文件，命中 0 个配方 · 配方表 33 条
 
 执行计划（按执行顺序）
-   1. [conda_env] conda测试
+   1. [conda_env] conda-create4测试
       期望 3.11.18 / 当前 3.11.18
       层级 conda
-      命令 C:\fakeconda.exe install --yes --prefix "C:\My Apps\conda测试" --override-channels -c conda-forge --file reports\conda\conda测试\specs.txt && "C:\My Apps\conda测试\python.exe" -m pip install --no-input --disable-pip-version-check -r reports\conda\conda测试\requirements.txt
+      命令 C:\fakeconda.exe install --yes --prefix "C:\My Apps\conda-create4测试" --override-channels -c conda-forge --file reports\conda\conda-create4测试\specs.txt && "C:\My Apps\conda-create4测试\python.exe" -m pip install --no-input --disable-pip-version-check -r reports\conda\conda-create4测试\requirements.txt
       conda 包 1 / pip 包 0 · 缺 conda 1 / pip 0
-      校验 C:\fakeconda.exe list --json --prefix "C:\My Apps\conda测试" && "C:\My Apps\conda测试\python.exe" -m pip list --format=json
+      校验 C:\fakeconda.exe list --json --prefix "C:\My Apps\conda-create4测试" && "C:\My Apps\conda-create4测试\python.exe" -m pip list --format=json
       降级 失败不删除环境；按 journal 记录手工清理
-      说明 缺 1 个 conda 包 / 0 个 pip 包，将更新环境；conda 缺包：xlrd（缺失）
+      说明 缺 1 个 conda 包 / 0 个 pip 包，将更新环境；conda 缺包：xlwt（缺失）
 
 PATH 变更
-  备份落点 reports/path-backup-20261118-154933.json（执行时生成，另有同名 .reg）
+  备份落点 reports/path-backup-20261119-202437.json（执行时生成，另有同名 .reg）
   用户级
     （无）
   系统级
@@ -35,13 +35,13 @@ PATH 变更
 即将执行 1 项，其中 0 项需管理员运行，0 项将触发重启。
 PATH 变更 0 条。
 
-这是真实执行，会改动系统。确认请输入 APPLY（区分大小写）: 事务日志: reports\.envlift-journal-20261118-154933.json
+这是真实执行，会改动系统。确认请输入 APPLY（区分大小写）: 事务日志: reports\.envlift-journal-20261119-202437.json
 
-  [执行] conda测试 —— C:\fakeconda.exe install --yes --prefix "C:\My Apps\conda测试" --override-channels -c conda-forge --file reports\conda\conda测试\specs.txt && "C:\My Apps\conda测试\python.exe" -m pip install --no-input --disable-pip-version-check -r reports\conda\conda测试\requirements.txt
-  [未验证] conda测试 —— conda 包不完整: xlrd（缺失）
+  [执行] conda-create4测试 —— C:\fakeconda.exe install --yes --prefix "C:\My Apps\conda-create4测试" --override-channels -c conda-forge --file reports\conda\conda-create4测试\specs.txt && "C:\My Apps\conda-create4测试\python.exe" -m pip install --no-input --disable-pip-version-check -r reports\conda\conda-create4测试\requirements.txt
+  [未验证] conda-create4测试 —— conda 包不完整: xlwt（缺失）
 
 执行完成: 成功 0 · 未验证 1 · 跳过 0 · 失败 0 · 阻止 0 · PATH 新增 0
-回滚命令: envlift restore --rollback --journal "reports\.envlift-journal-20261118-154933.json"
-报告: reports\restore-20261118-155001.md
-      reports\restore-20261118-155001.json
-EXIT1=2
+回滚命令: envlift restore --rollback --journal "reports\.envlift-journal-20261119-202437.json"
+报告: reports\restore-20261119-202450.md
+      reports\restore-20261119-202450.json
+EXIT=2

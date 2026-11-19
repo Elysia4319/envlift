@@ -1,9 +1,9 @@
 {
   "report_schema": 1,
   "kind": "restore-report",
-  "generated_at": "2026-11-18T16:26:22+08:00",
-  "config_path": "conda-fail-fixed.yaml",
-  "journal": "reports\\.envlift-journal-20261118-162554.json",
+  "generated_at": "2026-11-19T20:24:10+08:00",
+  "config_path": "conda-fail4.yaml",
+  "journal": "reports\\.envlift-journal-20261119-202358.json",
   "env": {
     "os": "Windows 11",
     "build": "26300",
@@ -14,7 +14,7 @@
     "network_ok": true,
     "elevated": true
   },
-  "plan_hash": "db6da2dda6d400d19533bc75e141a5bf2186fa528e205b114ee88bc4a1ade0e8",
+  "plan_hash": "5299efd285d1b01d3cbba0b61019fc79c184a4ec2cd04e941fe29748ddc657f9",
   "mode": "apply",
   "summary": {
     "total": 1,

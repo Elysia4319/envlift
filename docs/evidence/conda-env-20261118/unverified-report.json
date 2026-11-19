@@ -1,9 +1,9 @@
 {
   "report_schema": 1,
   "kind": "restore-report",
-  "generated_at": "2026-11-18T15:50:01+08:00",
-  "config_path": "conda-unverified-fixed.yaml",
-  "journal": "reports\\.envlift-journal-20261118-154933.json",
+  "generated_at": "2026-11-19T20:24:50+08:00",
+  "config_path": "conda-unverified4.yaml",
+  "journal": "reports\\.envlift-journal-20261119-202437.json",
   "env": {
     "os": "Windows 11",
     "build": "26300",
@@ -14,7 +14,7 @@
     "network_ok": true,
     "elevated": true
   },
-  "plan_hash": "d8b59e32c701b295738757e4edb6cd9536b71c113d64124ea433338fc34c54f2",
+  "plan_hash": "0503874580ac8e0195b464f09530ba679298fc2ca5df3f7e49d278ab9c968046",
   "mode": "apply",
   "summary": {
     "total": 1,
@@ -29,26 +29,26 @@
   },
   "items": [
     {
-      "target_id": "658597f5e2a3",
+      "target_id": "fb5e0a0183ed",
       "kind": "conda_env",
-      "name": "conda测试",
+      "name": "conda-create4测试",
       "expected_version": "3.11.18",
       "before_version": "3.11.18",
       "tier": "conda",
       "status": "unverified",
-      "command": "C:\\fakeconda.exe install --yes --prefix \"C:\\My Apps\\conda测试\" --override-channels -c conda-forge --file reports\\conda\\conda测试\\specs.txt \u0026\u0026 \"C:\\My Apps\\conda测试\\python.exe\" -m pip install --no-input --disable-pip-version-check -r reports\\conda\\conda测试\\requirements.txt",
+      "command": "C:\\fakeconda.exe install --yes --prefix \"C:\\My Apps\\conda-create4测试\" --override-channels -c conda-forge --file reports\\conda\\conda-create4测试\\specs.txt \u0026\u0026 \"C:\\My Apps\\conda-create4测试\\python.exe\" -m pip install --no-input --disable-pip-version-check -r reports\\conda\\conda-create4测试\\requirements.txt",
       "exit_code": 0,
       "verify_result": "fail",
-      "failure_reason": "conda 包不完整: xlrd（缺失）",
+      "failure_reason": "conda 包不完整: xlwt（缺失）",
       "needs_admin": false,
       "expect_reboot": false,
-      "reason": "缺 1 个 conda 包 / 0 个 pip 包，将更新环境；conda 缺包：xlrd（缺失）",
+      "reason": "缺 1 个 conda 包 / 0 个 pip 包，将更新环境；conda 缺包：xlwt（缺失）",
       "verify_command_present": true
     }
   ],
   "path_changes": [],
   "warnings": [
-    "conda 临时文件保留在 reports\\conda\\conda测试，排查后可手工删除"
+    "conda 临时文件保留在 reports\\conda\\conda-create4测试，排查后可手工删除"
   ],
   "decisions": {
     "apply_mode": "all"

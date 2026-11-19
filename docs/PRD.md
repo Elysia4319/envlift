@@ -260,6 +260,8 @@ base 仍保存完整 conda/pip 包清单，用于跨机器对比与审计；它�
 
 `mirrors` 的键是 profile 名，值支持 `conda_channels`、`pip_index_url`、`pip_extra_index_url`、`pip_trusted_host`。envlift **不硬编码**任何公共镜像；profile 由用户显式配置。envlift 也不会自动读取或迁移源机器的 `~/.condarc` / pip 配置，不会自动采集 `channel_alias` / `default_channels`。URL 中出现 userinfo 或敏感查询参数（token / password / key 等）时拒绝保存；默认只允许 HTTPS，HTTP 必须显式加入 `pip_trusted_host`。
 
+临时 `pip.ini` 的 `extra-index-url` / `trusted-host` 写成单键多值（空格分隔），不使用重复键；pip 的 append 选项会按空白拆分。
+
 `CondaChannels` 只传递配置里的 channel 名或完整 URL，不展开自定义 `channel_alias`；依赖自定义 alias 的环境需在目标机保留 conda 配置，或把 channel 写成完整 URL。
 
 ---

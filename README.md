@@ -95,6 +95,8 @@ CLI 的 `--conda-packages=conda|pip|both` 是**显式全局覆盖**：对非 bas
 
 镜像只使用配置里的命名 profile，不硬编码默认清华源；envlift **不会自动读取或迁移**源机器的 `~/.condarc` / pip 配置，也不会自动采集 channel_alias/default_channels。URL 中的 token / 密码不会被写入配置；带凭据的 URL 会被拒绝。默认只允许 HTTPS；HTTP 或 pip 的 `trusted-host` 必须显式配置。
 
+生成的临时 `pip.ini` 对 `extra-index-url` / `trusted-host` 使用单键多值（空格分隔），避免 pip 报 `option ... already exists`。
+
 ## 安全边界
 
 - envlift **会安装软件、修改用户级/系统级 PATH**，这不是纯只读工具。

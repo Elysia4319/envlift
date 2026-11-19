@@ -164,7 +164,7 @@
 - [x] apply：`conda create --yes --prefix ... --override-channels -c ... --file environment.yml` 成功；`conda env list --json` 能看到新环境。
 - [x] apply：`conda install --yes -p <prefix> --override-channels -c ... --file specs.txt` 可执行且不使用 `conda env update --yes`；不删除已有包（无 `--prune`）；`conda list` 校验通过后才显示 succeeded。
 - [x] apply：pip 阶段使用 `<prefix>\python.exe -m pip install -r requirements.txt`；`pip list` 校验通过。
-- [x] 镜像：配置命名 profile 后，临时 `CONDARC` / `PIP_CONFIG_FILE` 生成并包含预期内容；执行后成功场景清理临时目录。
+- [x] 镜像：配置命名 profile 后，临时 `CONDARC` / `PIP_CONFIG_FILE` 生成并包含预期内容；多 `extra-index-url` / `trusted-host` 用单键多值，VM 内 `python -m pip config list` 加载成功；执行后成功场景清理临时目录。
 - [ ] 安全：HTTP 源未配置 trusted-host 时拒绝；URL token/密码不落入配置；不自动接受 conda ToS。
 - [x] 失败注入：无效 conda 包导致 install 失败，确认环境仍可用、journal 有手工清理提示、报告不显示 succeeded。
 - [x] 缺包注入：包装器让 `conda list` 返回空、其余委托真实 conda；真实装好 tabulate 后报告仍为 `unverified`，不是 `succeeded`。

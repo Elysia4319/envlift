@@ -1,5 +1,5 @@
 envlift restore — 预演（未执行任何操作）
-配置 conda-update-fixed.yaml · schema v2 · 生成于 2026-11-18T15:48:28+08:00
+配置 conda-update4.yaml · schema v2 · 生成于 2026-11-19T20:23:32+08:00
 
 环境预检
   目标机      Windows 11 (build 26300) / amd64
@@ -15,7 +15,7 @@ envlift restore — 预演（未执行任何操作）
       层级 跳过 · conda 包与 pip 包均已匹配
 
 PATH 变更
-  备份落点 reports/path-backup-20261118-154828.json（执行时生成，另有同名 .reg）
+  备份落点 reports/path-backup-20261119-202332.json（执行时生成，另有同名 .reg）
   用户级
     （无）
   系统级
@@ -30,11 +30,11 @@ PATH 变更
 即将执行 0 项，其中 0 项需管理员运行，0 项将触发重启。
 PATH 变更 0 条。
 
-这是真实执行，会改动系统。确认请输入 APPLY（区分大小写）: 事务日志: reports\.envlift-journal-20261118-154828.json
+这是真实执行，会改动系统。确认请输入 APPLY（区分大小写）: 事务日志: reports\.envlift-journal-20261119-202332.json
 
 
 执行完成: 成功 0 · 未验证 0 · 跳过 0 · 失败 0 · 阻止 0 · PATH 新增 0
-回滚命令: envlift restore --rollback --journal "reports\.envlift-journal-20261118-154828.json"
-报告: reports\restore-20261118-154828.md
-      reports\restore-20261118-154828.json
-EXIT2=0
+回滚命令: envlift restore --rollback --journal "reports\.envlift-journal-20261119-202332.json"
+报告: reports\restore-20261119-202333.md
+      reports\restore-20261119-202333.json
+EXIT=0

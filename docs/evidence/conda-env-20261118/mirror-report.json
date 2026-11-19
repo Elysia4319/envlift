@@ -1,9 +1,9 @@
 {
   "report_schema": 1,
   "kind": "restore-report",
-  "generated_at": "2026-11-18T16:27:03+08:00",
-  "config_path": "conda-mirror-fixed.yaml",
-  "journal": "reports\\.envlift-journal-20261118-162650.json",
+  "generated_at": "2026-11-19T20:25:22+08:00",
+  "config_path": "conda-mirror4.yaml",
+  "journal": "reports\\.envlift-journal-20261119-202513.json",
   "env": {
     "os": "Windows 11",
     "build": "26300",
@@ -14,7 +14,7 @@
     "network_ok": true,
     "elevated": true
   },
-  "plan_hash": "2169d0dbd9e5f832e141cbac6f4f587c48007206f8531224122fa002ebd74346",
+  "plan_hash": "7fbf434bf34dc74afde59e960b753e5adb1f8596ef38f31f9c766d30fe7d4db6",
   "mode": "apply",
   "summary": {
     "total": 1,
@@ -29,16 +29,16 @@
   },
   "items": [
     {
-      "target_id": "4bbba0cb1cd4",
+      "target_id": "647994fc6781",
       "kind": "conda_env",
-      "name": "conda-mirror2测试",
+      "name": "conda-mirror4测试",
       "expected_version": "3.11.18",
       "tier": "conda",
       "status": "failed",
-      "command": "C:\\Miniconda3\\Scripts\\conda.exe create --yes --prefix \"C:\\My Apps\\conda-mirror2测试\" --override-channels -c conda-forge --file reports\\conda\\conda-mirror2测试\\environment.yml \u0026\u0026 \"C:\\My Apps\\conda-mirror2测试\\python.exe\" -m pip install --no-input --disable-pip-version-check -r reports\\conda\\conda-mirror2测试\\requirements.txt",
+      "command": "C:\\Miniconda3\\Scripts\\conda.exe create --yes --prefix \"C:\\My Apps\\conda-mirror4测试\" --override-channels -c conda-forge --file reports\\conda\\conda-mirror4测试\\environment.yml \u0026\u0026 \"C:\\My Apps\\conda-mirror4测试\\python.exe\" -m pip install --no-input --disable-pip-version-check -r reports\\conda\\conda-mirror4测试\\requirements.txt",
       "exit_code": 1,
       "verify_result": "fail",
-      "failure_reason": "$ C:\\Miniconda3\\Scripts\\conda.exe create --yes --prefix \"C:\\My Apps\\conda-mirror2测试\" --override-channels -c conda-forge --file reports\\conda\\conda-mirror2测试\\environment.yml\nWARNING conda.core.prefix_data:validate_path(345): Environment paths should not contain spaces. Prefix: 'C:\\My Apps\\conda-mirror2����'\r\nChannels:\r\n - conda-forge\r\nPlatform: win-64\r\nCollecting package metadata (repodata.json): ...working... done\r\nSolving environment: ...working... failed\r\nChannels:\r\n - conda-forge\r\nPlatform: win-64\r\nCollecting package metadata (repodata.json): ...working... done\r\nSolving environment: ...working... failed\r\n\r\nPackagesNotFoundInChannelsError: The following packages are not available from current channels:\r\n\r\n  - definitely-not-a-real-package-xyz\r\n\r\nCurrent channels:\r\n\r\n  - https://conda.anaconda.org/conda-forge\r\n\r\nTo search for alternate channels that may provide the conda package you're\r\nlooking for, navigate to\r\n\r\n    https://anaconda.org\r\n\r\nand use the search bar at the top of the page.\n环境不会自动删除；如需清理请手工运行: conda env remove --prefix \"C:\\My Apps\\conda-mirror2测试\"",
+      "failure_reason": "$ C:\\Miniconda3\\Scripts\\conda.exe create --yes --prefix \"C:\\My Apps\\conda-mirror4测试\" --override-channels -c conda-forge --file reports\\conda\\conda-mirror4测试\\environment.yml\nWARNING conda.core.prefix_data:validate_path(345): Environment paths should not contain spaces. Prefix: 'C:\\My Apps\\conda-mirror4����'\r\nChannels:\r\n - conda-forge\r\nPlatform: win-64\r\nCollecting package metadata (repodata.json): ...working... done\r\nSolving environment: ...working... failed\r\nChannels:\r\n - conda-forge\r\nPlatform: win-64\r\nCollecting package metadata (repodata.json): ...working... done\r\nSolving environment: ...working... failed\r\n\r\nPackagesNotFoundInChannelsError: The following packages are not available from current channels:\r\n\r\n  - definitely-not-a-real-package-xyz\r\n\r\nCurrent channels:\r\n\r\n  - https://conda.anaconda.org/conda-forge\r\n\r\nTo search for alternate channels that may provide the conda package you're\r\nlooking for, navigate to\r\n\r\n    https://anaconda.org\r\n\r\nand use the search bar at the top of the page.\n环境不会自动删除；如需清理请手工运行: conda env remove --prefix \"C:\\My Apps\\conda-mirror4测试\"",
       "needs_admin": false,
       "expect_reboot": false,
       "reason": "目标机不存在该环境，将创建并安装包；conda 缺包：definitely-not-a-real-package-xyz",
@@ -47,7 +47,7 @@
   ],
   "path_changes": [],
   "warnings": [
-    "conda 临时文件保留在 reports\\conda\\conda-mirror2测试，排查后可手工删除"
+    "conda 临时文件保留在 reports\\conda\\conda-mirror4测试，排查后可手工删除"
   ],
   "decisions": {
     "apply_mode": "all"

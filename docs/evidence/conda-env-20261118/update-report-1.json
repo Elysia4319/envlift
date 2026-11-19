@@ -1,9 +1,9 @@
 {
   "report_schema": 1,
   "kind": "restore-report",
-  "generated_at": "2026-11-18T15:48:04+08:00",
-  "config_path": "conda-update-fixed.yaml",
-  "journal": "reports\\.envlift-journal-20261118-154740.json",
+  "generated_at": "2026-11-19T20:23:07+08:00",
+  "config_path": "conda-update4.yaml",
+  "journal": "reports\\.envlift-journal-20261119-202241.json",
   "env": {
     "os": "Windows 11",
     "build": "26300",
@@ -14,7 +14,7 @@
     "network_ok": true,
     "elevated": true
   },
-  "plan_hash": "f08d6af18d24056975d2533db8ba096ac14d181da638d681f422268176ffebeb",
+  "plan_hash": "e09b70f9e0000f5bb9480374c2f4dbfa83d949ba73423ba25f9692ef37080f51",
   "mode": "apply",
   "summary": {
     "total": 1,
@@ -42,7 +42,7 @@
       "verify_result": "pass",
       "needs_admin": false,
       "expect_reboot": false,
-      "reason": "缺 1 个 conda 包 / 0 个 pip 包，将更新环境；conda 缺包：xlsxwriter（缺失）",
+      "reason": "缺 1 个 conda 包 / 0 个 pip 包，将更新环境；conda 缺包：xlwt（缺失）",
       "verify_command_present": true
     }
   ],

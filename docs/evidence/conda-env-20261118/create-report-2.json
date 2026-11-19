@@ -1,9 +1,9 @@
 {
   "report_schema": 1,
   "kind": "restore-report",
-  "generated_at": "2026-11-18T15:47:16+08:00",
-  "config_path": "conda-create-fixed.yaml",
-  "journal": "reports\\.envlift-journal-20261118-154716.json",
+  "generated_at": "2026-11-19T20:22:20+08:00",
+  "config_path": "conda-create4.yaml",
+  "journal": "reports\\.envlift-journal-20261119-202220.json",
   "env": {
     "os": "Windows 11",
     "build": "26300",
@@ -14,7 +14,7 @@
     "network_ok": true,
     "elevated": true
   },
-  "plan_hash": "15e65ec097bb56a3a3f2eb8326a86987d1ee131ab91d8761a72214011fbdbb74",
+  "plan_hash": "c410435be92cd2b9c47782c7a9c2a497127f2112e3d273a30c9f17c3a2b6a917",
   "mode": "apply",
   "summary": {
     "total": 1,
@@ -29,9 +29,9 @@
   },
   "items": [
     {
-      "target_id": "75913ca6703a",
+      "target_id": "fb5e0a0183ed",
       "kind": "conda_env",
-      "name": "conda-create2测试",
+      "name": "conda-create4测试",
       "expected_version": "3.11.18",
       "before_version": "3.11.18",
       "status": "skipped",
