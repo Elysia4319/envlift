@@ -25,6 +25,7 @@ Start-Process envlift.exe -ArgumentList '--serve','--no-open','--port','18082' -
 python scripts\ui-check\run_ui_check.py  'http://127.0.0.1:18082/?token=...' shots
 python scripts\ui-check\fake_poll_check.py 'http://127.0.0.1:18082/?token=...' shots
 python scripts\ui-check\layout_check.py  'http://127.0.0.1:18082/?token=...'
+python scripts\ui-check\decisions_check.py 'http://127.0.0.1:18082/?token=...' shots
 ```
 
 | 脚本 | 验证什么 |
@@ -32,6 +33,7 @@ python scripts\ui-check\layout_check.py  'http://127.0.0.1:18082/?token=...'
 | `run_ui_check.py` | 状态条六个事实 + 提权徽章；真实扫描的增量日志与分区顺序（未识别在前）；计划表每一列、`plan_hash` 格式、「执行还原」按钮禁用；PATH 台账五种标记；journal 空态；错误条按 `code` 显示；token 已从地址栏抹掉、浏览器持久存储为空；无 pageerror |
 | `fake_poll_check.py` | 用 route 拦截伪造三帧任务快照，断言 `?since=` 序列是 `0,1,2`、三条日志不重不漏。**这条专治 off-by-one**：第一版用 `next_seq` 当 `since`，会永久漏掉第一条日志，而真机扫描太快，很难靠肉眼发现 |
 | `layout_check.py` | 1360 / 820 / 390 三档宽度下页面无横向溢出 |
+| `decisions_check.py` | ④ 决策链路（安装包歧义、PATH 改写、撤销后 hash 复原）；二次确认面板的全选/清空/已选计数/逐项取消/命令展开，1440 与 820 单列、390 上下排列，以及真实页面 `.cf-foot` 吸底。用 `page.route` 把计划扩成 60 条管理员项，不执行安装 |
 
 ## 注意
 
