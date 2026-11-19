@@ -1,0 +1,56 @@
+{
+  "report_schema": 1,
+  "kind": "restore-report",
+  "generated_at": "2026-11-19T20:24:10+08:00",
+  "config_path": "conda-fail4.yaml",
+  "journal": "reports\\.envlift-journal-20261119-202358.json",
+  "env": {
+    "os": "Windows 11",
+    "build": "26300",
+    "arch": "amd64",
+    "username": "${USER}",
+    "hostname": "${HOST}",
+    "winget_ok": true,
+    "network_ok": true,
+    "elevated": true
+  },
+  "plan_hash": "5299efd285d1b01d3cbba0b61019fc79c184a4ec2cd04e941fe29748ddc657f9",
+  "mode": "apply",
+  "summary": {
+    "total": 1,
+    "succeeded": 0,
+    "skipped": 0,
+    "unverified": 0,
+    "manual": 0,
+    "blocked_needs_decision": 0,
+    "failed": 1,
+    "path_writes": 0,
+    "awaiting_reboot": false
+  },
+  "items": [
+    {
+      "target_id": "658597f5e2a3",
+      "kind": "conda_env",
+      "name": "conda测试",
+      "expected_version": "3.11.18",
+      "before_version": "3.11.18",
+      "tier": "conda",
+      "status": "failed",
+      "command": "C:\\Miniconda3\\Scripts\\conda.exe install --yes --prefix \"C:\\My Apps\\conda测试\" --override-channels -c conda-forge --file reports\\conda\\conda测试\\specs.txt \u0026\u0026 \"C:\\My Apps\\conda测试\\python.exe\" -m pip install --no-input --disable-pip-version-check -r reports\\conda\\conda测试\\requirements.txt",
+      "exit_code": 1,
+      "verify_result": "fail",
+      "failure_reason": "$ C:\\Miniconda3\\Scripts\\conda.exe install --yes --prefix \"C:\\My Apps\\conda测试\" --override-channels -c conda-forge --file reports\\conda\\conda测试\\specs.txt\nChannels:\r\n - conda-forge\r\nPlatform: win-64\r\nCollecting package metadata (repodata.json): ...working... done\r\nSolving environment: ...working... failed\r\nChannels:\r\n - conda-forge\r\nPlatform: win-64\r\nCollecting package metadata (repodata.json): ...working... done\r\nSolving environment: ...working... failed\r\n\r\nPackagesNotFoundInChannelsError: The following packages are not available from current channels:\r\n\r\n  - definitely-not-a-real-package-xyz\r\n\r\nCurrent channels:\r\n\r\n  - https://conda.anaconda.org/conda-forge\r\n\r\nTo search for alternate channels that may provide the conda package you're\r\nlooking for, navigate to\r\n\r\n    https://anaconda.org\r\n\r\nand use the search bar at the top of the page.\n环境不会自动删除；如需清理请手工运行: conda env remove --prefix \"C:\\My Apps\\conda测试\"",
+      "needs_admin": false,
+      "expect_reboot": false,
+      "reason": "缺 1 个 conda 包 / 0 个 pip 包，将更新环境；conda 缺包：definitely-not-a-real-package-xyz（缺失）",
+      "verify_command_present": true
+    }
+  ],
+  "path_changes": [],
+  "warnings": [
+    "conda 临时文件保留在 reports\\conda\\conda测试，排查后可手工删除"
+  ],
+  "decisions": {
+    "apply_mode": "all"
+  }
+}

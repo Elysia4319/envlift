@@ -40,6 +40,7 @@ func RenderMarkdown(d *Document) string {
 	fmt.Fprintf(&b, "| 跳过（已完成/被覆盖/被决策跳过） | %d |\n", d.Summary.Skipped)
 	fmt.Fprintf(&b, "| 因未决策被跳过 | %d |\n", d.Summary.BlockedNeedsDecision)
 	fmt.Fprintf(&b, "| manual | %d |\n", d.Summary.Manual)
+	fmt.Fprintf(&b, "| 未验证（缺包/版本不符） | %d |\n", d.Summary.Unverified)
 	fmt.Fprintf(&b, "| 失败 | %d |\n", d.Summary.Failed)
 	fmt.Fprintf(&b, "| PATH 写入 | %d |\n", d.Summary.PathWrites)
 	if d.Summary.AwaitingReboot {

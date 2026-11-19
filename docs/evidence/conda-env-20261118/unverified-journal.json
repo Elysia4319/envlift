@@ -1,0 +1,25 @@
+{
+  "app": "envlift",
+  "kind": "apply-journal",
+  "schema": 2,
+  "started_at": "2026-11-19T20:24:37+08:00",
+  "config_path": "conda-unverified4.yaml",
+  "steps": [
+    {
+      "index": 0,
+      "kind": "conda_env",
+      "name": "conda-create4测试",
+      "tier": "conda",
+      "command": "C:\\fakeconda.exe install --yes --prefix \"C:\\My Apps\\conda-create4测试\" --override-channels -c conda-forge --file reports\\conda\\conda-create4测试\\specs.txt \u0026\u0026 \"C:\\My Apps\\conda-create4测试\\python.exe\" -m pip install --no-input --disable-pip-version-check -r reports\\conda\\conda-create4测试\\requirements.txt",
+      "needs_admin": false,
+      "expect_reboot": false,
+      "exit_code": 0,
+      "output": "$ C:\\fakeconda.exe install --yes --prefix \"C:\\My Apps\\conda-create4测试\" --override-channels -c conda-forge --file reports\\conda\\conda-create4测试\\specs.txt\nChannels:\r\n - conda-forge\r\nPlatform: win-64\r\nCollecting package metadata (repodata.json): ...working... done\r\nSolving environment: ...working... done\r\n\r\n## Package Plan ##\r\n\r\n  environment location: C:\\My Apps\\conda-create4����\r\n\r\n  added / updated specs:\r\n    - pip\r\n    - python=3.11.18\r\n    - xlwt\r\n\r\n\r\nThe following NEW packages will be INSTALLED:\r\n\r\n  xlwt               conda-forge/noarch::xlwt-1.3.0-py_1 \r\n\r\n\r\n\r\nDownloading and Extracting Packages: ...working... done\r\nPreparing transaction: ...working... done\r\nVerifying transaction: ...working... done\r\nExecuting transaction: ...working... done\n---\n$ \"C:\\My Apps\\conda-create4测试\\python.exe\" -m pip install --no-input --disable-pip-version-check -r reports\\conda\\conda-create4测试\\requirements.txt\n--- 校验失败 ---\nconda 包不完整: xlwt（缺失）",
+      "status": "unverified",
+      "started_at": "2026-11-19T20:24:37+08:00",
+      "finished_at": "2026-11-19T20:24:50+08:00",
+      "unverified_reason": "conda 包不完整: xlwt（缺失）"
+    }
+  ],
+  "finished": true
+}

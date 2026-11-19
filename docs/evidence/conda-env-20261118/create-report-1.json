@@ -1,0 +1,53 @@
+{
+  "report_schema": 1,
+  "kind": "restore-report",
+  "generated_at": "2026-11-19T20:21:57+08:00",
+  "config_path": "conda-create4.yaml",
+  "journal": "reports\\.envlift-journal-20261119-202100.json",
+  "env": {
+    "os": "Windows 11",
+    "build": "26300",
+    "arch": "amd64",
+    "username": "${USER}",
+    "hostname": "${HOST}",
+    "winget_ok": true,
+    "network_ok": true,
+    "elevated": true
+  },
+  "plan_hash": "6044559f09edcbb886a33c68d470fd1716bd6d310fa5bef81e45ac2c0aea21d2",
+  "mode": "apply",
+  "summary": {
+    "total": 1,
+    "succeeded": 1,
+    "skipped": 0,
+    "unverified": 0,
+    "manual": 0,
+    "blocked_needs_decision": 0,
+    "failed": 0,
+    "path_writes": 0,
+    "awaiting_reboot": false
+  },
+  "items": [
+    {
+      "target_id": "fb5e0a0183ed",
+      "kind": "conda_env",
+      "name": "conda-create4测试",
+      "expected_version": "3.11.18",
+      "actual_version": "3.11.18",
+      "tier": "conda",
+      "status": "succeeded",
+      "command": "C:\\Miniconda3\\Scripts\\conda.exe create --yes --prefix \"C:\\My Apps\\conda-create4测试\" --override-channels -c conda-forge --file reports\\conda\\conda-create4测试\\environment.yml \u0026\u0026 \"C:\\My Apps\\conda-create4测试\\python.exe\" -m pip install --no-input --disable-pip-version-check -r reports\\conda\\conda-create4测试\\requirements.txt",
+      "exit_code": 0,
+      "verify_result": "pass",
+      "needs_admin": false,
+      "expect_reboot": false,
+      "reason": "目标机不存在该环境，将创建并安装包；conda 缺包：numpy；pip 缺包：requests",
+      "verify_command_present": true
+    }
+  ],
+  "path_changes": [],
+  "warnings": null,
+  "decisions": {
+    "apply_mode": "all"
+  }
+}

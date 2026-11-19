@@ -1,0 +1,48 @@
+{
+  "report_schema": 1,
+  "kind": "restore-report",
+  "generated_at": "2026-11-19T20:23:33+08:00",
+  "config_path": "conda-update4.yaml",
+  "journal": "reports\\.envlift-journal-20261119-202332.json",
+  "env": {
+    "os": "Windows 11",
+    "build": "26300",
+    "arch": "amd64",
+    "username": "${USER}",
+    "hostname": "${HOST}",
+    "winget_ok": true,
+    "network_ok": true,
+    "elevated": true
+  },
+  "plan_hash": "74bc83888fc56d72003d4e701e2129a27a236bc1a4a916a1c19b94fd3bdd43a3",
+  "mode": "apply",
+  "summary": {
+    "total": 1,
+    "succeeded": 0,
+    "skipped": 1,
+    "unverified": 0,
+    "manual": 0,
+    "blocked_needs_decision": 0,
+    "failed": 0,
+    "path_writes": 0,
+    "awaiting_reboot": false
+  },
+  "items": [
+    {
+      "target_id": "658597f5e2a3",
+      "kind": "conda_env",
+      "name": "conda测试",
+      "expected_version": "3.11.18",
+      "before_version": "3.11.18",
+      "status": "skipped",
+      "needs_admin": false,
+      "expect_reboot": false,
+      "reason": "conda 包与 pip 包均已匹配"
+    }
+  ],
+  "path_changes": [],
+  "warnings": null,
+  "decisions": {
+    "apply_mode": "all"
+  }
+}

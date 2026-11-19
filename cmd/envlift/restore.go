@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Elysia4319/envlift/internal/apply"
+	"github.com/Elysia4319/envlift/internal/conda"
 	"github.com/Elysia4319/envlift/internal/config"
 	"github.com/Elysia4319/envlift/internal/engine"
 	"github.com/Elysia4319/envlift/internal/pathenv"
@@ -47,9 +48,16 @@ func runRestore(args []string) int {
 	journalPath := fs.String("journal", "", "指定 journal 文件（回滚用，缺省取 reports/ 下最新）")
 	decisionsPath := fs.String("decisions", "", "决策文件（缺省读配置同目录的 envlift.decisions.yaml，存在则加载）")
 	relocationsPath := fs.String("relocations", relocation.DefaultPath, "重装账本路径")
+	condaPackages := fs.String("conda-packages", plan.CondaModeNone, "conda 环境恢复范围：conda / pip / both / none（默认 none）")
 	if err := fs.Parse(args); err != nil {
 		return exitError
 	}
+	condaExplicit := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "conda-packages" {
+			condaExplicit = true
+		}
+	})
 
 	// 回滚不依赖配置：只需要 journal 里的 PATH 快照。
 	if *rollback {
@@ -69,6 +77,7 @@ func runRestore(args []string) int {
 		SysInfo:  sysinfo.New(reg),
 		Prober:   probe.New(4 * time.Second),
 		Redactor: config.NewRedactor("", ""),
+		Conda:    conda.NewScanner(),
 	}
 	env, err := scanner.ProbeEnvironment()
 	if err != nil {
@@ -130,18 +139,21 @@ func runRestore(args []string) int {
 	}
 
 	p, err := plan.Build(plan.Options{
-		Config:         cfg,
-		Target:         target,
-		InstallerDir:   absInstallerDir,
-		InstallerFiles: files,
-		Recipes:        recipes.Merge(cfg),
-		Now:            time.Now(),
-		Exists:         pathExists,
-		Expand:         redactor.ExpandString,
-		ExpandVars:     pathenv.ExpandVars,
-		RawConfig:      rawMode,
-		Decisions:      ds,
-		Relocations:    ledger,
+		Config:            cfg,
+		Target:            target,
+		InstallerDir:      absInstallerDir,
+		InstallerFiles:    files,
+		Recipes:           recipes.Merge(cfg),
+		Now:               time.Now(),
+		Exists:            pathExists,
+		Expand:            redactor.ExpandString,
+		ExpandVars:        pathenv.ExpandVars,
+		RawConfig:         rawMode,
+		Decisions:         ds,
+		Relocations:       ledger,
+		CondaPackageMode:  *condaPackages,
+		CondaModeExplicit: condaExplicit,
+		CondaWorkDir:      filepath.Join(*journalDir, "conda"),
 	})
 	if err != nil {
 		var derr *plan.DecisionErrors
@@ -221,6 +233,7 @@ func buildTarget(env *scan.Environment) plan.Target {
 		WingetForceOK: env.Info.WingetForceAvailable,
 		Runtimes:      make(map[string]plan.RuntimeState, len(env.Runtimes)),
 		PathDirs:      env.PathDirs,
+		CondaEnvs:     map[string]plan.CondaEnvState{},
 	}
 	for _, d := range env.Info.Drives {
 		t.Drives = append(t.Drives, d.Letter)
@@ -235,7 +248,18 @@ func buildTarget(env *scan.Environment) plan.Target {
 		}
 		t.Runtimes[r.Name] = st
 	}
+	for _, e := range env.CondaEnvs {
+		t.CondaEnvs[plan.CondaStateKey(e.Prefix)] = condaState(e)
+	}
 	return t
+}
+
+func condaState(e config.CondaEnv) plan.CondaEnvState {
+	st := plan.CondaEnvState{
+		Name: e.Name, Manager: e.Manager, Present: true, Prefix: e.Prefix, PythonVersion: e.PythonVersion,
+		Packages: conda.CondaIndex(e.Packages), PipPackages: conda.PipIndex(e.PipPackages),
+	}
+	return st
 }
 
 func probeNetwork(timeout time.Duration) (bool, string) {
@@ -361,6 +385,11 @@ func renderPlan(w io.Writer, p *plan.Plan, cfgPath, installerDir string) {
 			if it.Command != "" {
 				fmt.Fprintf(w, "      命令 %s\n", it.Command)
 			}
+			if it.Conda != nil {
+				fmt.Fprintf(w, "      conda 包 %d / pip 包 %d · 缺 conda %d / pip %d\n",
+					len(it.Conda.Packages), len(it.Conda.PipPackages),
+					len(it.CondaMissing), len(it.PipMissing))
+			}
 			if it.NeedsAdmin {
 				fmt.Fprintln(w, "      需要 管理员运行（执行时逐项询问）")
 			}
@@ -418,8 +447,8 @@ func renderPlan(w io.Writer, p *plan.Plan, cfgPath, installerDir string) {
 	}
 
 	fmt.Fprintln(w, "\n汇总")
-	fmt.Fprintf(w, "  winget %d · 本地包 %d · manual %d · 跳过 %d · 待确认 %d · 因未决策跳过 %d\n",
-		p.Summary.Winget, p.Summary.Local, p.Summary.Manual, p.Summary.Skipped,
+	fmt.Fprintf(w, "  winget %d · 本地包 %d · conda %d · manual %d · 跳过 %d · 待确认 %d · 因未决策跳过 %d\n",
+		p.Summary.Winget, p.Summary.Local, p.Summary.Conda, p.Summary.Manual, p.Summary.Skipped,
 		p.Summary.Pending, p.Summary.BlockedNeedsDecision)
 
 	if p.IsBlocked() {
@@ -537,8 +566,8 @@ func doApply(p *plan.Plan, env *scan.Environment, cfgPath, journalDir string, ye
 		return exitError
 	}
 
-	fmt.Printf("\n执行完成: 成功 %d · 跳过 %d · 失败 %d · 阻止 %d · PATH 新增 %d\n",
-		res.Executed, res.Skipped, res.Failed, res.Blocked, res.PathAdded)
+	fmt.Printf("\n执行完成: 成功 %d · 未验证 %d · 跳过 %d · 失败 %d · 阻止 %d · PATH 新增 %d\n",
+		res.Executed, res.Unverified, res.Skipped, res.Failed, res.Blocked, res.PathAdded)
 	if res.Stopped != "" {
 		fmt.Printf("停止原因: %s\n", res.Stopped)
 	}
@@ -559,6 +588,9 @@ func doApply(p *plan.Plan, env *scan.Environment, cfgPath, journalDir string, ye
 
 	if res.Failed > 0 || res.Blocked > 0 {
 		return exitError
+	}
+	if res.Unverified > 0 {
+		return exitRefused
 	}
 	if res.Undecided > 0 {
 		return exitRefused

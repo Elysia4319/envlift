@@ -20,6 +20,7 @@ import (
 const (
 	DecKindSoftware = targetid.KindSoftware
 	DecKindRuntime  = targetid.KindRuntime
+	DecKindCondaEnv = targetid.KindCondaEnv
 	DecKindPath     = targetid.KindPath
 )
 
@@ -216,7 +217,7 @@ func ValidateDecisions(p *Plan, ds Decisions) *DecisionErrors {
 		}
 
 		switch kind {
-		case DecKindSoftware, DecKindRuntime:
+		case DecKindSoftware, DecKindRuntime, DecKindCondaEnv:
 			p.validateItemDecision(d, it, report)
 		case DecKindPath:
 			p.validatePathDecision(d, p.Path[pathIdx], report)
@@ -728,6 +729,8 @@ func allowedActions(kind string) []string {
 		return []string{ActionSelect, ActionOverrideRepresentative, ActionSkip, ActionMarkManual, ActionSetLocation}
 	case DecKindRuntime:
 		return []string{ActionSelect, ActionSkip, ActionMarkManual, ActionSetLocation}
+	case DecKindCondaEnv:
+		return []string{ActionSkip, ActionMarkManual}
 	case DecKindPath:
 		return []string{ActionAdd, ActionAccept, ActionRewrite, ActionSkip, ActionMarkInvalid}
 	}

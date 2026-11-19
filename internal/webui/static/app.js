@@ -381,7 +381,10 @@
     show($('scan-idle'), false);
     setBusy(true);
 
-    startTask(R.scan, { raw: $('scan-raw').checked }, function (snap) {
+    startTask(R.scan, {
+      raw: $('scan-raw').checked,
+      keep_pip_bootstrap: $('scan-keep-pip-bootstrap').checked
+    }, function (snap) {
       if (snap.id) { state.scanTaskId = snap.id; }
       updatePhase(snap);
       appendLogs(snap);
@@ -517,6 +520,34 @@
       + '<tbody>' + rtRows + '</tbody></table></div></div>'
       + '<div class="section-foot"><span class="hint">版本一律取自实际执行 --version，不信目录名（实测目录名会骗人）。</span></div></div>');
 
+    // —— conda 环境 ——
+    var cenvs = cfg.conda_envs || [];
+    var mirrorNames = Object.keys(cfg.mirrors || {});
+    var condaRows = cenvs.map(function (e, i) {
+      var isBase = !!e.base;
+      var condaOn = isBase ? false : (e.restore_conda !== false);
+      var pipOn = isBase ? false : (e.restore_pip !== false);
+      var mirrorOpts = ['<option value="">默认源</option>'].concat(mirrorNames.map(function (name) {
+        return '<option value="' + esc(name) + '"' + (e.mirror === name ? ' selected' : '') + '>' + esc(name) + '</option>';
+      }));
+      return '<tr>'
+        + '<td class="name">' + esc(e.name) + (isBase ? ' <span class="chip" data-tone="manual">base 只读</span>' : '') + '</td>'
+        + '<td class="code">' + esc(e.python_version || '—') + '</td>'
+        + '<td class="data">' + esc(e.prefix || '—') + '</td>'
+        + '<td class="num">' + ((e.packages || []).length) + '</td>'
+        + '<td class="num">' + ((e.pip_packages || []).length) + '</td>'
+        + '<td><input type="checkbox" class="conda-conda" data-ci="' + i + '"' + (condaOn ? ' checked' : '') + (isBase ? ' disabled' : '') + ' aria-label="恢复 conda 包"></td>'
+        + '<td><input type="checkbox" class="conda-pip" data-ci="' + i + '"' + (pipOn ? ' checked' : '') + (isBase ? ' disabled' : '') + ' aria-label="恢复 pip 包"></td>'
+        + '<td><select class="conda-mirror" data-ci="' + i + '"' + (isBase ? ' disabled' : '') + '>' + mirrorOpts.join('') + '</select></td>'
+        + '</tr>';
+    }).join('');
+    if (!condaRows) { condaRows = '<tr><td colspan="8" class="hint">（未发现 conda 环境）</td></tr>'; }
+    out.push('<div class="section"><div class="section-head"><h2>conda 环境</h2><span class="count">' + cenvs.length + ' 个</span></div>'
+      + '<div class="section-body tight"><div class="table-wrap"><table class="ledger">'
+      + '<thead><tr><th>环境</th><th>Python</th><th>前缀</th><th>conda 包</th><th>pip 包</th><th>恢复 conda</th><th>恢复 pip</th><th>镜像</th></tr></thead>'
+      + '<tbody>' + condaRows + '</tbody></table></div></div>'
+      + '<div class="section-foot"><span class="hint">base 默认只读；命名环境可分别关闭 conda/pip。镜像 profile 需先在 <code>mirrors:</code> 中定义，不会硬编码默认清华源。</span></div></div>');
+
     // —— 未识别（排在已识别之前）——
     out.push(softwareSection('未识别', unrec, 'limitUnrecognized',
       '这些条目没有配方覆盖，还原时会落到 manual。带 winget id 的那些属于「配方缺口」——补一条配方就能自动装。',
@@ -549,6 +580,7 @@
       state.commitOut = $('commit-out').value;
     });
     bindSoftwareControls(box);
+    bindCondaControls(box);
     updateCommitCount();
     setBusy(state.busy); // 重渲染后按钮的禁用态要跟着当前忙碌状态走
   }
@@ -620,6 +652,30 @@
     });
   }
 
+  function bindCondaControls(scope) {
+    Array.prototype.forEach.call(scope.querySelectorAll('.conda-conda'), function (cb) {
+      cb.addEventListener('change', function () {
+        var i = parseInt(cb.getAttribute('data-ci'), 10);
+        var list = (state.scan && state.scan.config && state.scan.config.conda_envs) || [];
+        if (list[i]) { list[i].restore_conda = cb.checked; }
+      });
+    });
+    Array.prototype.forEach.call(scope.querySelectorAll('.conda-pip'), function (cb) {
+      cb.addEventListener('change', function () {
+        var i = parseInt(cb.getAttribute('data-ci'), 10);
+        var list = (state.scan && state.scan.config && state.scan.config.conda_envs) || [];
+        if (list[i]) { list[i].restore_pip = cb.checked; }
+      });
+    });
+    Array.prototype.forEach.call(scope.querySelectorAll('.conda-mirror'), function (sel) {
+      sel.addEventListener('change', function () {
+        var i = parseInt(sel.getAttribute('data-ci'), 10);
+        var list = (state.scan && state.scan.config && state.scan.config.conda_envs) || [];
+        if (list[i]) { list[i].mirror = sel.value; }
+      });
+    });
+  }
+
   function updateCommitCount() {
     var n = Object.keys(state.excluded).length;
     var text = n === 0
@@ -645,9 +701,18 @@
     var out = (state.commitOut || 'envlift.yaml').trim() || 'envlift.yaml';
     setText($('commit-result'), '正在写入…');
     setBusy(true);
+    var condaSettings = (((state.scan && state.scan.config) || {}).conda_envs || []).map(function (e) {
+      return {
+        name: e.name,
+        manager: e.manager || '',
+        restore_conda: e.base ? false : (e.restore_conda !== false),
+        restore_pip: e.base ? false : (e.restore_pip !== false),
+        mirror: e.mirror || ''
+      };
+    });
     api(R.scanCommit, {
       method: 'POST',
-      body: { task_id: state.scanTaskId, out: out, on_exist: onExist, exclude: excludeIDs() }
+      body: { task_id: state.scanTaskId, out: out, on_exist: onExist, exclude: excludeIDs(), conda: condaSettings }
     }).then(function (r) {
       setBusy(false);
       var cfg = (state.scan && state.scan.config) || {};
@@ -672,6 +737,7 @@
       box.innerHTML = tallyHtml([
         ['schema', 'v' + (cfg.schema || '?')],
         ['软件条目', String((cfg.software || []).length)],
+        ['conda 环境', String((cfg.conda_envs || []).length)],
         ['PATH 用户级', String(((cfg.path || {}).user || []).length)],
         ['PATH 系统级', String(((cfg.path || {}).machine || []).length)],
         ['生成时间', String(cfg.generated_at || '?')]
@@ -751,7 +817,7 @@
   }
 
   function tierChip(tier) {
-    var t = tier === 'winget' || tier === 'local' || tier === 'manual' ? tier : 'skip';
+    var t = tier === 'winget' || tier === 'local' || tier === 'conda' || tier === 'manual' ? tier : 'skip';
     return '<span class="chip" data-tone="' + t + '">' + esc(tier || '—') + '</span>';
   }
 
@@ -790,6 +856,7 @@
         ['条目', String(s.total || 0)],
         ['winget', String(s.winget || 0)],
         ['本地包', String(s.local || 0)],
+        ['conda', String(s.conda || 0)],
         ['manual', String(s.manual || 0)],
         ['跳过', String(s.skipped || 0)],
         ['未决策跳过', String(s.blocked_needs_decision || 0)],
@@ -814,9 +881,26 @@
     var rows = (p.items || []).map(function (it, i) {
       var exp = it.expected_version || '—';
       var cur = it.current_version || '—';
+      var condaNote = '';
+      if (it.conda) {
+        condaNote = '<br><span class="hint">conda ' + ((it.conda.packages || []).length)
+          + ' 包 · pip ' + ((it.conda.pip_packages || []).length) + ' 包';
+        if ((it.conda_missing || []).length) {
+          condaNote += ' · 缺 conda ' + it.conda_missing.length + '：'
+            + esc(it.conda_missing.slice(0, 4).join(', '))
+            + (it.conda_missing.length > 4 ? ' …' : '');
+        }
+        if ((it.pip_missing || []).length) {
+          condaNote += ' · 缺 pip ' + it.pip_missing.length + '：'
+            + esc(it.pip_missing.slice(0, 4).join(', '))
+            + (it.pip_missing.length > 4 ? ' …' : '');
+        }
+        condaNote += '</span>';
+      }
       return '<tr>'
         + '<td class="num">' + (i + 1) + '</td>'
         + '<td class="name">' + esc(it.name) + statusChip(it)
+        + condaNote
         + (it.manual_hint ? '<br><span class="hint">' + esc(it.manual_hint) + '</span>' : '') + '</td>'
         + '<td class="code">' + esc(exp) + '<br><span class="hint">当前 ' + esc(cur) + '</span></td>'
         + '<td>' + tierChip(it.tier) + '</td>'
@@ -939,7 +1023,8 @@
       + '<button class="btn btn-ghost btn-sm dec-apply-dir" type="button"'
       + (dirOk ? '' : ' disabled') + '>指定目录</button>'
       + (dirOk ? '' : '<span class="hint">'
-        + (it.decision === 'select' ? '当前版本不支持与选包/选配方组合'
+        + (it.kind === 'conda_env' ? 'conda 环境不支持指定安装目录'
+          : it.decision === 'select' ? '当前版本不支持与选包/选配方组合'
           : (it.tier === 'winget' && !forceOk ? '本机 winget 不支持 --force，不能指定目录'
             : '该配方不支持指定安装目录'))
         + '</span>');
@@ -1324,6 +1409,7 @@
     }
     run.innerHTML += '<div class="guard" style="margin-top:12px"><strong>执行完成。</strong>'
       + '成功 ' + esc(String(res.executed || 0)) + ' · 跳过 ' + esc(String(res.skipped || 0))
+      + ' · 未验证 ' + esc(String(res.unverified || 0))
       + ' · 失败 ' + esc(String(res.failed || 0)) + ' · 阻止 ' + esc(String(res.blocked || 0))
       + ' · 未决策跳过 ' + esc(String(res.undecided || 0))
       + ' · PATH 新增 ' + esc(String(res.path_added || 0)) + '</div>';
@@ -1562,6 +1648,7 @@
         + '<td>' + (r.mode ? '<span class="chip" data-tone="' + (r.mode === 'apply' ? 'ok' : 'idle') + '">' + esc(r.mode) + '</span>' : '<span class="hint">—</span>') + '</td>'
         + '<td class="num">' + esc(String(s.succeeded || 0)) + '</td>'
         + '<td class="num">' + esc(String(s.skipped || 0)) + '</td>'
+        + '<td class="num">' + esc(String(s.unverified || 0)) + '</td>'
         + '<td class="num">' + esc(String(s.manual || 0)) + '</td>'
         + '<td class="num">' + esc(String(s.blocked_needs_decision || 0)) + '</td>'
         + '<td class="num">' + esc(String(s.failed || 0)) + '</td>'
@@ -1578,7 +1665,7 @@
       + '<button class="btn btn-sm" id="btn-rep-diff" type="button" disabled>对比选中的两份</button>'
       + '</div></div>'
       + '<div class="section-body tight"><div class="table-wrap"><table class="ledger">'
-      + '<thead><tr><th></th><th>时间</th><th>mode</th><th>成功</th><th>跳过</th><th>manual</th>'
+      + '<thead><tr><th></th><th>时间</th><th>mode</th><th>成功</th><th>跳过</th><th>未验证</th><th>manual</th>'
       + '<th>未决策</th><th>失败</th><th>环境</th><th></th></tr></thead>'
       + '<tbody>' + rows + '</tbody></table></div>'
       + '<div class="section-foot"><span class="hint">勾选两份报告可以对比（只支持两份）。默认按时间倒序。</span></div>'
@@ -1674,6 +1761,7 @@
       + tallyHtml([
         ['成功', String(s.succeeded || 0)],
         ['跳过', String(s.skipped || 0)],
+        ['未验证', String(s.unverified || 0)],
         ['manual', String(s.manual || 0)],
         ['未决策', String(s.blocked_needs_decision || 0)],
         ['失败', String(s.failed || 0)],
@@ -1760,6 +1848,7 @@
   function repStatusChip(status) {
     var tone = status === 'succeeded' ? 'ok'
       : status === 'failed' ? 'warn'
+        : status === 'unverified' ? 'warn'
         : status === 'manual' ? 'manual' : 'skip';
     return '<span class="chip" data-tone="' + tone + '">' + esc(status || '—') + '</span>';
   }

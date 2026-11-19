@@ -5,11 +5,13 @@
 package scan
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/Elysia4319/envlift/internal/conda"
 	"github.com/Elysia4319/envlift/internal/config"
 	"github.com/Elysia4319/envlift/internal/pathenv"
 	"github.com/Elysia4319/envlift/internal/probe"
@@ -42,6 +44,8 @@ type Scanner struct {
 	// Tree 与 WingetRunner 用于软件清单采集；为 nil 时跳过对应来源。
 	Tree         winreg.Tree
 	WingetRunner softscan.Runner
+	// Conda 为 nil 时跳过 conda 环境采集；生产入口会注入真实扫描器。
+	Conda *conda.Scanner
 
 	// Exists / Expand / SessionPath / Lookup 用于 PATH 解析，测试可注入。
 	Exists      func(string) bool
@@ -85,6 +89,8 @@ type Environment struct {
 	PathDirs []string
 	// Soft 是三源采集的软件清单与统计；Tree 为 nil 时为空。
 	Soft *softscan.Result
+	// CondaEnvs 是本机 conda 环境的只读快照，供 scan 写配置与 plan 比对。
+	CondaEnvs []config.CondaEnv
 }
 
 // ProbeEnvironment 只读探测目标机环境，不生成配置、不写文件。
@@ -125,6 +131,17 @@ func (s *Scanner) ProbeEnvironment() (*Environment, error) {
 
 	if s.Tree != nil {
 		env.Soft = softscan.Collect(s.Tree, s.WingetRunner)
+	}
+	if s.Conda != nil {
+		cr, err := s.Conda.Scan(context.Background())
+		if err != nil {
+			env.Info.Warnings = append(env.Info.Warnings, "conda 环境采集失败: "+err.Error())
+		} else {
+			env.CondaEnvs = cr.Envs
+			for _, w := range cr.Warnings {
+				env.Info.Warnings = append(env.Info.Warnings, w)
+			}
+		}
 	}
 	return env, nil
 }
@@ -186,6 +203,7 @@ func (s *Scanner) Run() (*Result, error) {
 	if env.Soft != nil {
 		cfg.Software = env.Soft.Software
 	}
+	cfg.CondaEnvs = env.CondaEnvs
 
 	red := s.Redactor
 	if red.Username == "" || red.Hostname == "" {

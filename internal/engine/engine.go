@@ -20,6 +20,7 @@ import (
 
 	"github.com/Elysia4319/envlift/internal/api"
 	"github.com/Elysia4319/envlift/internal/apply"
+	"github.com/Elysia4319/envlift/internal/conda"
 	"github.com/Elysia4319/envlift/internal/config"
 	"github.com/Elysia4319/envlift/internal/match"
 	"github.com/Elysia4319/envlift/internal/pathenv"
@@ -68,8 +69,10 @@ func Deps(c Config) api.Deps {
 	}
 
 	return api.Deps{
-		Status:     func(ctx context.Context) (any, error) { return status(c) },
-		Scan:       func(ctx context.Context, raw bool, rep task.Reporter) ([]byte, error) { return doScan(c, raw, rep) },
+		Status: func(ctx context.Context) (any, error) { return status(c) },
+		Scan: func(ctx context.Context, raw, keepPipBootstrap bool, rep task.Reporter) ([]byte, error) {
+			return doScan(c, raw, keepPipBootstrap, rep)
+		},
 		Commit:     func(req api.CommitRequest) (api.CommitResult, error) { return commit(c, req) },
 		LoadConfig: config.Load,
 		BuildPlan: func(cfg *config.Config, decisions json.RawMessage) (*plan.Plan, error) {
@@ -96,6 +99,7 @@ func newScanner(c Config) *scan.Scanner {
 		SysInfo:      sysinfo.New(reg),
 		Prober:       probe.New(4 * time.Second),
 		Redactor:     config.NewRedactor("", ""),
+		Conda:        conda.NewScanner(),
 	}
 }
 
@@ -168,9 +172,10 @@ func scanTargets(sw []config.Software) []scanTarget {
 	return out
 }
 
-func doScan(c Config, raw bool, rep task.Reporter) ([]byte, error) {
+func doScan(c Config, raw, keepPipBootstrap bool, rep task.Reporter) ([]byte, error) {
 	sc := newScanner(c)
 	sc.Redactor.Raw = raw
+	sc.Conda.KeepPipBootstrap = keepPipBootstrap
 
 	rep.Phase("读注册表与 PATH", 0, 3)
 	res, err := sc.Run()
@@ -243,6 +248,9 @@ func commit(c Config, req api.CommitRequest) (api.CommitResult, error) {
 		}
 		p.Config.Extra["x-excluded"] = excluded
 	}
+	if err := applyCondaSettings(p.Config, req.Conda); err != nil {
+		return api.CommitResult{}, err
+	}
 
 	if _, err := os.Stat(out); err == nil {
 		switch req.OnExist {
@@ -266,6 +274,44 @@ func commit(c Config, req api.CommitRequest) (api.CommitResult, error) {
 		return api.CommitResult{}, err
 	}
 	return api.CommitResult{Written: out, Total: total, Excluded: len(excluded)}, nil
+}
+
+// applyCondaSettings 把 GUI 的 conda 开关写回扫描结果。
+//
+// 只改开关与 mirror，不信任前端传来的包列表/路径；未命中的环境直接报错，
+// 避免「勾了但没生效」。
+func applyCondaSettings(cfg *config.Config, settings []api.CondaSetting) error {
+	if len(settings) == 0 {
+		return nil
+	}
+	idx := map[string]int{}
+	for i, env := range cfg.CondaEnvs {
+		idx[condaSettingKey(env.Name, env.Manager)] = i
+	}
+	for _, s := range settings {
+		i, ok := idx[condaSettingKey(s.Name, s.Manager)]
+		if !ok {
+			// manager 可能被脱敏成 ${USER}，允许退化为按 name 匹配唯一项。
+			var hits []int
+			for j, env := range cfg.CondaEnvs {
+				if strings.EqualFold(env.Name, s.Name) {
+					hits = append(hits, j)
+				}
+			}
+			if len(hits) != 1 {
+				return fmt.Errorf("conda 设置引用了不存在或无法唯一确定的环境: %s", s.Name)
+			}
+			i = hits[0]
+		}
+		cfg.CondaEnvs[i].RestoreConda = s.RestoreConda
+		cfg.CondaEnvs[i].RestorePip = s.RestorePip
+		cfg.CondaEnvs[i].Mirror = s.Mirror
+	}
+	return nil
+}
+
+func condaSettingKey(name, manager string) string {
+	return strings.ToLower(strings.TrimSpace(name)) + "|" + strings.ToLower(strings.TrimSpace(manager))
 }
 
 // partitionExcluded 按 target_id 把软件条目切成「保留」与「排除」两段，顺序不变。
@@ -335,8 +381,9 @@ func buildPlan(c Config, cfg *config.Config, rawDecisions json.RawMessage) (*pla
 		WingetOK: env.Info.WingetAvailable, WingetVer: env.Info.WingetVersion,
 		WingetForceOK: env.Info.WingetForceAvailable,
 		NetworkOK:     netOK, NetworkNote: netNote,
-		Runtimes: map[string]plan.RuntimeState{},
-		PathDirs: env.PathDirs,
+		Runtimes:  map[string]plan.RuntimeState{},
+		PathDirs:  env.PathDirs,
+		CondaEnvs: map[string]plan.CondaEnvState{},
 	}
 	for _, d := range env.Info.Drives {
 		target.Drives = append(target.Drives, d.Letter)
@@ -350,6 +397,12 @@ func buildPlan(c Config, cfg *config.Config, rawDecisions json.RawMessage) (*pla
 			st.Path = *r.Executable
 		}
 		target.Runtimes[r.Name] = st
+	}
+	for _, e := range env.CondaEnvs {
+		target.CondaEnvs[plan.CondaStateKey(e.Prefix)] = plan.CondaEnvState{
+			Name: e.Name, Manager: e.Manager, Present: true, Prefix: e.Prefix, PythonVersion: e.PythonVersion,
+			Packages: conda.CondaIndex(e.Packages), PipPackages: conda.PipIndex(e.PipPackages),
+		}
 	}
 
 	files, _ := os.ReadDir(c.InstallerDir)
@@ -367,18 +420,20 @@ func buildPlan(c Config, cfg *config.Config, rawDecisions json.RawMessage) (*pla
 		ledger = relocation.New()
 	}
 	p, err := plan.Build(plan.Options{
-		Config:         cfg,
-		Target:         target,
-		InstallerDir:   absDir,
-		InstallerFiles: names,
-		Recipes:        recipes.Merge(cfg),
-		Now:            time.Now(),
-		Exists:         func(p string) bool { _, err := os.Stat(p); return err == nil },
-		Expand:         red.ExpandString,
-		ExpandVars:     expandVars,
-		RawConfig:      plan.DetectRaw(cfg),
-		Decisions:      ds,
-		Relocations:    ledger,
+		Config:           cfg,
+		Target:           target,
+		InstallerDir:     absDir,
+		InstallerFiles:   names,
+		Recipes:          recipes.Merge(cfg),
+		Now:              time.Now(),
+		Exists:           func(p string) bool { _, err := os.Stat(p); return err == nil },
+		Expand:           red.ExpandString,
+		ExpandVars:       expandVars,
+		RawConfig:        plan.DetectRaw(cfg),
+		Decisions:        ds,
+		Relocations:      ledger,
+		CondaPackageMode: plan.CondaModeBoth,
+		CondaWorkDir:     filepath.Join(absOrSelf(c.ReportsDir), "conda"),
 	})
 	if err != nil {
 		return nil, err

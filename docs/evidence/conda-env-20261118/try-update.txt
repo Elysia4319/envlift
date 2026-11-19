@@ -1,0 +1,36 @@
+Channels:
+ - conda-forge
+Platform: win-64
+Collecting package metadata (repodata.json): ...working... done
+Solving environment: ...working... done
+
+## Package Plan ##
+
+  environment location: C:\My Apps\conda测试
+
+  added / updated specs:
+    - numpy=2.4.6
+    - pip
+    - python=3.11.18
+    - scipy
+
+
+The following packages will be downloaded:
+
+    package                    |            build
+    ---------------------------|-----------------
+    scipy-1.17.1               |  py311h9c22a71_1        14.5 MB  conda-forge
+    ------------------------------------------------------------
+                                           Total:        14.5 MB
+
+The following NEW packages will be INSTALLED:
+
+  scipy              conda-forge/win-64::scipy-1.17.1-py311h9c22a71_1
+
+
+
+Downloading and Extracting Packages: ...working... done
+Preparing transaction: ...working... done
+Verifying transaction: ...working... done
+Executing transaction: ...working... done
+EXIT=0

@@ -54,6 +54,7 @@ type Summary struct {
 	Total                int  `json:"total"`
 	Succeeded            int  `json:"succeeded"`
 	Skipped              int  `json:"skipped"`
+	Unverified           int  `json:"unverified"`
 	Manual               int  `json:"manual"`
 	BlockedNeedsDecision int  `json:"blocked_needs_decision"`
 	Failed               int  `json:"failed"`
@@ -293,6 +294,9 @@ func buildItems(p *plan.Plan, steps []apply.Step) []ItemResult {
 			case apply.StepFailed:
 				r.Status = "failed"
 				r.FailureReason = s.Output
+			case apply.StepUnverified:
+				r.Status = "unverified"
+				r.FailureReason = s.UnverifiedReason
 			case apply.StepSkipped:
 				r.Status = "skipped"
 			case apply.StepBlocked:
@@ -304,15 +308,16 @@ func buildItems(p *plan.Plan, steps []apply.Step) []ItemResult {
 				r.VerifyResult = "not_run"
 			case s.Status == apply.StepOK:
 				r.VerifyResult = "pass"
-			case s.Status == apply.StepFailed:
+			case s.Status == apply.StepFailed || s.Status == apply.StepUnverified:
 				r.VerifyResult = "fail"
 			}
 			r.ActualVersion = s.ActualVersion
 			r.VersionRaw = s.VersionRaw
 			r.InstallDirVerified = s.InstallDirVerified
 			r.InstallDirActual = s.InstallDirActual
-			// verify 跑过且成功、却解析不出版本 → 明确标 unparsed（不是"没跑"）。
-			if it.VerifyCmd != "" && s.ActualVersion == "" {
+			// 只有 verify 成功、却解析不出版本才标 unparsed；失败/阻止/未验证
+			// 本来就没有可信版本，标 unparsed 会与失败原因混淆。
+			if it.VerifyCmd != "" && s.ActualVersion == "" && s.Status == apply.StepOK {
 				r.VersionUnparsed = true
 			}
 		}
@@ -376,6 +381,8 @@ func summarize(doc *Document, res *apply.Result) Summary {
 			s.Succeeded++
 		case "failed":
 			s.Failed++
+		case "unverified":
+			s.Unverified++
 		case "skipped":
 			s.Skipped++
 		case plan.StatusManual:

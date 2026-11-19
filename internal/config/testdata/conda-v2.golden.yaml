@@ -1,0 +1,49 @@
+app: envlift
+schema: 2
+generated_at: '2026-11-18T10:00:00+08:00'
+source_machine:
+  os:
+    version: Windows 11
+    build: '26100'
+    product_name: Windows 11 Pro
+    display_version: 24H2
+  arch: amd64
+  hostname: '${HOST}'
+  username: '${USER}'
+path:
+  user: []
+  machine: []
+runtimes:
+  - name: python
+    command: python
+    version: 3.11.9
+    manager: conda
+    executable: 'C:\Users\${USER}\miniconda3\envs\py311\python.exe'
+software: []
+conda_envs:
+  - name: py311
+    prefix: 'C:\Users\${USER}\miniconda3\envs\py311'
+    manager: 'C:\Users\${USER}\miniconda3'
+    conda_exe: 'C:\Users\${USER}\miniconda3\Scripts\conda.exe'
+    conda_version: 24.1.2
+    python_version: 3.11.9
+    restore_conda: true
+    restore_pip: true
+    mirror: corp
+    packages:
+      - name: numpy
+        version: 1.26.4
+        build: py311_0
+        channel: conda-forge
+    pip_packages:
+      - name: requests
+        version: 2.31.0
+mirrors:
+  corp:
+    conda_channels:
+      - conda-forge
+    pip_index_url: 'https://mirror.example/simple'
+    pip_extra_index_url:
+      - 'https://pypi.example/simple'
+    pip_trusted_host:
+      - mirror.example
