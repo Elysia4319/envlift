@@ -44,6 +44,8 @@ python scripts\ui-check\decisions_check.py 'http://127.0.0.1:18082/?token=...' s
 - `decisions_check.py` 需要服务进程的工作目录里有可读的 `envlift.yaml`（仓库里 `envlift.yaml` 被 gitignore，worktree 默认没有）。脚本启动时先调 `/api/v1/config/load` 做前置检查，缺失会立刻报错并提示放置位置或改用 `--config=<路径>`，不会干等 180s 超时。
 - `decisions_check.py` 的夹具**只改 `/api/v1/plan` 的响应**：把真实计划扩成 60 条 `needs_admin` 项，并在命令后追加 `--ui-check-ellipsis` 标记用于证明夹具生效。等待条件也是「带标记的命令 == 60 条」，不能只等数量——真实计划本身就可能已有 60 条 `needs_admin`，旧 DOM 会立刻满足数量条件，导致断言读到旧列表。它不伪造 `/api/v1/apply`，不点「执行还原」，不执行任何安装。
 - 1360 视口下侧栏占 262px，命令区约 762px，夹具命令能整行放下；因此「单行省略/展开」断言固定在 820 视口执行，1360 只验证布局与按钮状态。
+- 「安装包歧义」与「PATH 改写」两段依赖配置内容：配置里没有多候选安装包、没有待确认的 `PATH[user]` 项时会打印跳过原因，不会失败。要让这两段真正执行，参考 `fixtures/demo-envlift.yaml` 并在 `installers/` 放两个匹配同一配方的安装包。
+- 「保存决策」按条件执行：有决策时点击 `#btn-save-decisions` 并断言 `plan-load-note` 出现「决策已保存」；没有决策时断言按钮禁用并跳过保存。确认面板里的 `#btn-save-decisions-2` 没有禁用逻辑，因此只在有决策时点击一次，避免对空决策文件做无意义写入。
 - 截图落到 `shots/`，该目录不进版本库。
 - **改完 `app.js` 先跑 `node --check internal/webui/static/app.js`**：embed 只关心字节，
   语法错了 `go test ./...` 一样全绿，只有真正打开页面才会炸。

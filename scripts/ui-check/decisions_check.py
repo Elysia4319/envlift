@@ -432,10 +432,34 @@ def main():
 
         page.screenshot(path=os.path.join(OUT, "decisions-confirm.png"), full_page=True)
 
-        # ---- 5) 保存决策文件 ----
-        page.click("#btn-save-decisions")
-        page.wait_for_function("() => (document.getElementById('plan-load-note')||{}).textContent.indexOf('决策已保存') >= 0", timeout=15000)
-        print("保存决策:", page.text_content("#plan-load-note"))
+        # ---- 5) 保存决策文件（仅在有决策时可点）----
+        # app.js 在 state.decisions 为空时把 #btn-save-decisions 设为 disabled；
+        # 本次 fixture 若没有歧义/PATH 决策，点它只会等到超时。
+        save = page.locator("#btn-save-decisions")
+        if save.is_enabled():
+            save.click()
+            page.wait_for_function(
+                "() => (document.getElementById('plan-load-note')||{}).textContent.indexOf('决策已保存') >= 0",
+                timeout=15000,
+            )
+            print("保存决策:", page.text_content("#plan-load-note"))
+        else:
+            assert save.is_disabled(), "无决策时保存按钮应禁用"
+            print("无决策：保存按钮禁用，跳过保存断言")
+
+        # 确认面板里的 #btn-save-decisions-2 走同一个 saveDecisionsFile()，
+        # app.js 没有给它禁用逻辑；有决策时点一次，没有决策时只记录状态。
+        save2 = page.locator("#btn-save-decisions-2")
+        assert save2.count() == 1, "确认面板缺少保存决策按钮"
+        if save.is_enabled():
+            save2.click()
+            page.wait_for_function(
+                "() => (document.getElementById('plan-load-note')||{}).textContent.indexOf('决策已保存') >= 0",
+                timeout=15000,
+            )
+            print("确认面板保存决策:", page.text_content("#plan-load-note"))
+        else:
+            print("无决策：确认面板保存按钮存在但无可保存内容（脚本不点击）")
 
         # ---- 6) 三档宽度无横向溢出 ----
         for w, h in ((1360, 1000), (820, 900), (390, 844)):
