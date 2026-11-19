@@ -1226,10 +1226,10 @@
         .map(function (c) { return 'PATH[' + c.section + '] ' + c.value; }));
 
     var out = [];
-    out.push('<div class="section" id="confirm-panel"><div class="section-head"><h2>二次确认</h2>'
+    out.push('<div class="section cf-panel" id="confirm-panel"><div class="section-head"><h2>二次确认</h2>'
       + '<div class="copy-row push-right"><span class="hint">plan_hash</span>'
       + '<code class="hash">' + esc(state.planHash) + '</code></div></div>'
-      + '<div class="section-body">');
+      + '<div class="section-body cf-body">');
 
     out.push(tallyHtml([
       ['计划项', String((p.items || []).length)],
@@ -1240,48 +1240,65 @@
     ]));
 
     if (blocked > 0) {
-      out.push('<div class="guard" style="margin-top:12px"><strong>' + blocked + ' 项因未决策将被跳过：</strong>'
+      out.push('<div class="guard cf-guard"><strong>' + blocked + ' 项因未决策将被跳过：</strong>'
         + esc(blockedNames.join('、')) + '</div>');
     }
 
-    out.push('<p class="hint" style="margin:12px 0 0">PATH 变更 ' + pathWrites.length + ' 条；执行前会先把 HKCU/HKLM 两处 Path '
-      + '的原始值与类型整体备份到 <code>reports/path-backup-*.json</code> 与 journal，失败或需要时可以逐字符回滚。</p>');
+    var pathHint = 'PATH 变更 ' + pathWrites.length + ' 条；执行前会先把 HKCU/HKLM 两处 Path '
+      + '的原始值与类型整体备份到 reports/path-backup-*.json 与 journal，失败或需要时可以逐字符回滚。';
+    out.push('<p class="hint cf-path-hint" title="' + esc(pathHint) + '">PATH 变更 ' + pathWrites.length
+      + ' 条；执行前会备份 HKCU/HKLM 两处 Path 原始值与类型到 <code>reports/path-backup-*.json</code>'
+      + ' 与 journal，可逐字符回滚。</p>');
 
-    out.push('<div class="cf-grid" style="margin-top:14px">'
-      + '<label class="field"><input type="radio" name="cf-mode" id="cf-mode-all" value="all" checked>'
-      + ' <span>全部执行（逐项确认需要管理员运行的项）</span></label>'
-      + '<label class="field"><input type="radio" name="cf-mode" id="cf-mode-skip" value="skip_admin">'
-      + ' <span>仅执行无需管理员运行的部分（skip_admin）</span></label>'
+    out.push('<div class="cf-mode" role="radiogroup" aria-label="执行范围">'
+      + '<label class="cf-mode-opt"><input type="radio" name="cf-mode" id="cf-mode-all" value="all" checked>'
+      + '<span class="cf-mode-title">全部执行</span><span class="cf-mode-note">逐项确认管理员项</span></label>'
+      + '<label class="cf-mode-opt"><input type="radio" name="cf-mode" id="cf-mode-skip" value="skip_admin">'
+      + '<span class="cf-mode-title">仅无需管理员</span><span class="cf-mode-note">skip_admin</span></label>'
       + '</div>');
 
-    out.push('<div class="cf-ack" style="margin-top:10px" hidden><label class="field">'
+    out.push('<div class="cf-ack" hidden><label class="cf-ack-row">'
       + '<input type="checkbox" id="cf-ack-skip">'
-      + ' <span>我知道：需要管理员运行的项（' + admins.length + ' 项）会被阻止，不会执行</span></label></div>');
+      + '<span>我知道：需要管理员运行的项（' + admins.length + ' 项）会被阻止，不会执行</span></label></div>');
 
-    out.push('<div id="cf-admin" style="margin-top:12px">'
-      + '<div class="hint" style="margin-bottom:6px">需要管理员运行的项，逐项勾选确认：</div>'
-      + '<div id="cf-admin-list">'
+    out.push('<section class="cf-admin-card" id="cf-admin" aria-labelledby="cf-admin-title">'
+      + '<div class="cf-admin-head">'
+      + '<div class="cf-admin-title"><strong id="cf-admin-title">需管理员运行 ' + admins.length + ' 项</strong>'
+      + '<span class="cf-admin-count" id="cf-admin-count">已选 0/' + admins.length + '</span></div>'
+      + '<div class="cf-admin-tools">'
+      + '<button class="btn btn-ghost btn-sm" id="cf-admin-all" type="button"'
+      + ' title="只勾选全部管理员项；仍需点击「执行还原」才会开始">全选</button>'
+      + '<button class="btn btn-ghost btn-sm" id="cf-admin-none" type="button">清空</button>'
+      + '</div></div>'
+      + '<div class="cf-admin-list" id="cf-admin-list">'
       + (admins.length
         ? admins.map(function (a) {
-          return '<label class="field cf-admin-row"><input type="checkbox" class="cf-admin-check" data-name="' + esc(a.name) + '">'
-            + ' <span><strong>' + esc(a.name) + '</strong><br><code>' + esc(a.command) + '</code></span></label>';
+          return '<div class="cf-admin-row">'
+            + '<label class="cf-admin-pick">'
+            + '<input type="checkbox" class="cf-admin-check" data-name="' + esc(a.name) + '">'
+            + '<span class="cf-admin-name" title="' + esc(a.name) + '">' + esc(a.name) + '</span>'
+            + '</label>'
+            + '<code class="cf-admin-cmd" role="button" tabindex="0" aria-expanded="false" title="'
+            + esc(a.command) + '">' + esc(a.command) + '</code>'
+            + '</div>';
         }).join('')
-        : '<span class="hint">（无）</span>')
-      + '</div></div>');
+        : '<div class="cf-admin-empty hint">（无）</div>')
+      + '</div></section>');
 
     if (reboots.length) {
-      out.push('<div style="margin-top:12px"><label class="field"><input type="checkbox" id="cf-reboot-ack">'
-        + ' <span>我知道这些项执行后会重启：' + esc(reboots.map(function (it) { return it.name; }).join('、')) + '</span></label></div>');
+      out.push('<div class="cf-reboot"><label class="cf-reboot-row"><input type="checkbox" id="cf-reboot-ack">'
+        + '<span><strong>执行后会重启：</strong>'
+        + esc(reboots.map(function (it) { return it.name; }).join('、')) + '</span></label></div>');
     } else {
       out.push('<input type="checkbox" id="cf-reboot-ack" hidden>');
     }
 
-    out.push('<div style="margin-top:16px; display:flex; gap:10px; align-items:center; flex-wrap:wrap">'
+    out.push('<div id="apply-run" hidden></div>');
+    out.push('<div class="cf-foot">'
       + '<button class="btn" id="btn-apply" type="button">执行还原</button>'
       + '<button class="btn btn-ghost btn-sm" id="btn-save-decisions-2" type="button">保存决策文件</button>'
-      + '<span class="hint" id="cf-note">mode 必须显式选择；空载荷不会被当成「可以跑」。</span>'
+      + '<span class="hint cf-note" id="cf-note">mode 必须显式选择；全选后仍需点击「执行还原」；空载荷不会被当成「可以跑」。</span>'
       + '</div>');
-    out.push('<div id="apply-run" hidden></div>');
     out.push('</div></div>');
     return out.join('');
   }
@@ -1291,19 +1308,25 @@
     var modeSkip = scope.querySelector('#cf-mode-skip');
     var ackWrap = scope.querySelector('.cf-ack');
     var ack = scope.querySelector('#cf-ack-skip');
-    var list = scope.querySelector('#cf-admin-list');
+    var adminCard = scope.querySelector('#cf-admin');
+    var count = scope.querySelector('#cf-admin-count');
     var reboot = scope.querySelector('#cf-reboot-ack');
     var btn = scope.querySelector('#btn-apply');
     var save2 = scope.querySelector('#btn-save-decisions-2');
+    var selectAll = scope.querySelector('#cf-admin-all');
+    var clearAll = scope.querySelector('#cf-admin-none');
     if (save2) { save2.addEventListener('click', saveDecisionsFile); }
     if (!btn) { return; }
 
     function ready() {
       var skip = modeSkip && modeSkip.checked;
       var ok = true;
+      var checks = scope.querySelectorAll('.cf-admin-check');
+      var picked = 0;
+      for (var j = 0; j < checks.length; j++) { if (checks[j].checked) { picked++; } }
+      if (count) { count.textContent = '已选 ' + picked + '/' + checks.length; }
       if (skip) { ok = !!(ack && ack.checked); }
       else {
-        var checks = scope.querySelectorAll('.cf-admin-check');
         for (var i = 0; i < checks.length; i++) { if (!checks[i].checked) { ok = false; } }
       }
       // 会重启的项：必须单独勾一次，skip_admin 下也一样（提权项被阻止时不计入。
@@ -1315,15 +1338,44 @@
     function syncMode() {
       var skip = modeSkip && modeSkip.checked;
       if (ackWrap) { ackWrap.hidden = !skip; }
-      if (list) { list.hidden = skip; }
+      if (adminCard) { adminCard.hidden = skip; }
+      // 选中态用显式类，不依赖 :has()；老版 Edge/Chrome 也能正确高亮。
+      Array.prototype.forEach.call(scope.querySelectorAll('.cf-mode-opt'), function (opt) {
+        var radio = opt.querySelector('input[type="radio"]');
+        opt.classList.toggle('is-checked', !!(radio && radio.checked));
+      });
       ready();
+    }
+
+    function setAll(checked) {
+      Array.prototype.forEach.call(scope.querySelectorAll('.cf-admin-check'), function (c) {
+        c.checked = checked;
+        c.dispatchEvent(new Event('change', { bubbles: true }));
+      });
     }
 
     if (modeAll) { modeAll.addEventListener('change', syncMode); }
     if (modeSkip) { modeSkip.addEventListener('change', syncMode); }
     if (ack) { ack.addEventListener('change', ready); }
+    if (selectAll) { selectAll.addEventListener('click', function () { setAll(true); }); }
+    if (clearAll) { clearAll.addEventListener('click', function () { setAll(false); }); }
     Array.prototype.forEach.call(scope.querySelectorAll('.cf-admin-check'), function (c) {
       c.addEventListener('change', ready);
+    });
+    Array.prototype.forEach.call(scope.querySelectorAll('.cf-admin-cmd'), function (cmd) {
+      function toggle() {
+        var row = cmd.closest('.cf-admin-row');
+        if (!row) { return; }
+        var open = row.classList.toggle('is-open');
+        cmd.setAttribute('aria-expanded', open ? 'true' : 'false');
+      }
+      cmd.addEventListener('click', toggle);
+      cmd.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toggle();
+        }
+      });
     });
     if (reboot) { reboot.addEventListener('change', ready); }
     btn.addEventListener('click', function () { startApply(scope); });
