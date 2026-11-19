@@ -5,8 +5,12 @@
   - 决策徽章与撤销（撤销后 plan_hash 回到原值）
   - 决策改变 → plan_hash 变 → 确认态重置
   - 二次确认面板：mode / 只读提示 / 逐项 admin / reboot_ack / 「N 项因未决策将被跳过」
-  - 全选 / 清空 / 逐项取消 / 命令展开，以及 1440 / 820 / 390 的行布局
+  - 全选 / 清空 / 逐项取消 / 命令展开（820 视口断言省略），以及 1440 / 820 / 390 的行布局
+  - 夹具生效证明：60 条管理员命令都带 --ui-check-ellipsis 标记
   - 控制台零错误、三档宽度无横向溢出
+
+前置：服务进程的工作目录里要有可读的 envlift.yaml（仓库里被 gitignore）。
+缺失时脚本会立刻报错；也可用 --config=<路径> 指定。
 
 不做任何安装：脚本不点「执行还原」，只验证按钮的启用条件。
 """
@@ -19,6 +23,12 @@ from playwright.sync_api import sync_playwright
 
 BASE = sys.argv[1]
 OUT = sys.argv[2] if len(sys.argv) > 2 else "shots"
+# 计划里的配置路径。服务进程按自己的工作目录解析相对路径；
+# 工作目录里没有 envlift.yaml 时脚本会在前置检查处立刻失败，而不是等 180s 超时。
+CONFIG = "envlift.yaml"
+for _arg in sys.argv[3:]:
+    if _arg.startswith("--config="):
+        CONFIG = _arg.split("=", 1)[1].strip() or CONFIG
 os.makedirs(OUT, exist_ok=True)
 
 errors = []
@@ -27,6 +37,9 @@ errors = []
 # 扩成 60 条 needs_admin 项，仅用于确认面板的布局与批量交互回归。
 LONG_ADMIN_COUNT = 60
 PLAN_PATTERN = "**/api/v1/plan"
+FIXTURE_MARK = "--ui-check-ellipsis"
+# 真实 BuildPlan 要探测 winget/网络，慢机器上会超过 route.fetch 默认的 30s。
+FETCH_TIMEOUT_MS = 180000
 
 
 def launch(p):
@@ -48,39 +61,72 @@ def wait_hash_change(page, old, timeout=30000):
 
 
 def expand_plan(page):
-    """把计划响应扩成 60 条管理员项；真实字段与顺序不变。"""
+    """把计划响应扩成 60 条管理员项；真实字段与顺序不变。
+
+    用显式 body 而不是 response=/json= 组合：后者在不同 Playwright 版本里对
+    「两个来源同时给」的取舍不一致，容易让夹具看起来生效、实际没生效。
+    另外 route.fetch 默认只等 30s，真实 BuildPlan 要探测 winget/网络，慢机器会超时。
+    """
+    problems = []
 
     def handler(route):
-        resp = route.fetch()
-        data = resp.json()
-        plan = data.get("plan") or {}
-        items = plan.get("items") or []
-        seed = next((it for it in items if it.get("needs_admin")), None)
-        if not seed:
-            route.fulfill(response=resp)
-            return
-        made = []
-        for i in range(LONG_ADMIN_COUNT):
-            it = dict(seed)
-            it["target_id"] = "ui-long-%02d" % i
-            it["name"] = "%s #%02d" % (seed.get("name") or "Package", i + 1)
-            it["status"] = "planned"
-            it["needs_admin"] = True
-            it["expect_reboot"] = i == 0
-            # 真实命令可能很短，撑不到省略号；补一段无害参数，专测单行省略/展开。
-            base = it.get("command") or ""
-            it["command"] = base + " --ui-check-ellipsis --no-op --trace-level verbose --timeout 600"
-            made.append(it)
-        others = [it for it in items if not it.get("needs_admin")]
-        plan["items"] = made + others
-        plan["summary"] = dict(plan.get("summary") or {})
-        plan["summary"]["winget"] = LONG_ADMIN_COUNT
-        plan["summary"]["blocked_needs_decision"] = 0
-        plan["path_changes"] = []
-        data["plan"] = plan
-        route.fulfill(response=resp, json=data)
+        try:
+            resp = route.fetch(timeout=FETCH_TIMEOUT_MS)
+            data = resp.json()
+            plan = data.get("plan") or {}
+            items = plan.get("items") or []
+            seed = next((it for it in items if it.get("needs_admin")), None)
+            if not seed:
+                problems.append("真实计划里没有 needs_admin 项，无法构造 60 条夹具")
+                route.fulfill(response=resp)
+                return
+            made = []
+            for i in range(LONG_ADMIN_COUNT):
+                it = dict(seed)
+                it["target_id"] = "ui-long-%02d" % i
+                it["name"] = "%s #%02d" % (seed.get("name") or "Package", i + 1)
+                it["status"] = "planned"
+                it["needs_admin"] = True
+                it["expect_reboot"] = i == 0
+                # 真实命令可能很短，撑不到省略号；补一段无害参数，专测单行省略/展开。
+                base = it.get("command") or ""
+                it["command"] = base + " " + FIXTURE_MARK + " --no-op --trace-level verbose --timeout 600"
+                made.append(it)
+            others = [it for it in items if not it.get("needs_admin")]
+            plan["items"] = made + others
+            plan["summary"] = dict(plan.get("summary") or {})
+            plan["summary"]["winget"] = LONG_ADMIN_COUNT
+            plan["summary"]["blocked_needs_decision"] = 0
+            plan["path_changes"] = []
+            data["plan"] = plan
+            route.fulfill(
+                status=200,
+                headers={"Content-Type": "application/json"},
+                body=json.dumps(data, ensure_ascii=False),
+            )
+        except Exception as e:  # noqa: BLE001
+            problems.append("%s: %s" % (type(e).__name__, e))
+            try:
+                route.abort()
+            except Exception:  # noqa: BLE001
+                pass
 
     page.route(PLAN_PATTERN, handler)
+    return problems
+
+
+def wait_fixture(page, count=LONG_ADMIN_COUNT, problems=None, timeout=180000):
+    """等长列表渲染出来；夹具注入失败时立刻报错，不干等超时。"""
+    try:
+        page.wait_for_function(
+            "n => document.querySelectorAll('.cf-admin-check').length === n",
+            arg=count,
+            timeout=timeout,
+        )
+    except Exception as e:  # noqa: BLE001
+        if problems:
+            raise SystemExit("夹具注入失败，页面没有渲染 %d 条管理员项: %s" % (count, problems))
+        raise
 
 
 def row_layout(page):
@@ -98,6 +144,25 @@ def row_layout(page):
             };
         }"""
     )
+
+
+def preflight(page, token):
+    """配置缺失时立刻给出可操作的提示，而不是让页面等 180s 超时。"""
+    r = page.request.post(
+        BASE.split("?")[0] + "/api/v1/config/load",
+        headers={"X-Envlift-Token": token, "Content-Type": "application/json"},
+        data=json.dumps({"path": CONFIG}),
+    )
+    if not r.ok:
+        raise SystemExit(
+            "读取配置失败（%d）：%s\n"
+            "服务进程的工作目录里没有 %s？先把待测配置放到该目录，"
+            "或用 --config=<路径> 指定。详见 scripts/ui-check/README.md。"
+            % (r.status, (r.text() or "")[:300], CONFIG)
+        )
+    cfg = r.json()
+    print("前置配置：%s（schema=%s，软件 %d 条）"
+          % (CONFIG, cfg.get("schema"), len(cfg.get("software") or [])))
 
 
 def main():
@@ -118,6 +183,7 @@ def main():
         # 每次运行都从「没有决策」开始：决策文件是本机持久产物，
         # 不清掉会让上一次运行的结果影响这一次（hash 不再变化、断言全乱）。
         token = parse_qs(urlparse(BASE).query)["token"][0]
+        preflight(page, token)
         page.request.post(
             BASE.split("?")[0] + "/api/v1/decisions",
             headers={"X-Envlift-Token": token, "Content-Type": "application/json"},
@@ -129,6 +195,7 @@ def main():
         assert page.evaluate("localStorage.length + sessionStorage.length") == 0
 
         page.click("#tab-restore")
+        page.fill("#plan-config", CONFIG)
         page.click("#btn-plan")
         page.wait_for_selector("#plan-result .section", timeout=180000)
         hash0 = page.text_content("#plan-hash")
@@ -191,14 +258,10 @@ def main():
             print("跳过 PATH 改写：当前 fixture 无 PATH[user] 待确认项")
 
         # ---- 4) 二次确认面板 ----
-        expand_plan(page)
+        fixture_problems = expand_plan(page)
         page.click("#btn-plan")
         # 面板已经存在，wait_for_selector 会立刻返回；必须等长列表真正渲染出来。
-        page.wait_for_function(
-            "n => document.querySelectorAll('.cf-admin-check').length === n",
-            arg=LONG_ADMIN_COUNT,
-            timeout=180000,
-        )
+        wait_fixture(page, problems=fixture_problems)
         page.wait_for_timeout(300)
 
         panel = page.locator("#confirm-panel")
@@ -209,6 +272,17 @@ def main():
         checks = panel.locator(".cf-admin-check")
         total = checks.count()
         assert total == LONG_ADMIN_COUNT, "管理员项数量异常: %d" % total
+        assert not fixture_problems, "夹具注入失败: %s" % fixture_problems
+
+        # 证明夹具真的进了页面：60 条数量可能是真实计划碰巧凑出来的，标记不会。
+        cmds = panel.locator(".cf-admin-cmd")
+        marked = cmds.evaluate_all(
+            "els => els.filter(e => (e.textContent + ' ' + (e.title || '')).includes('%s')).length"
+            % FIXTURE_MARK
+        )
+        assert marked == LONG_ADMIN_COUNT, "夹具标记只出现在 %d/%d 条命令里" % (marked, total)
+        print("夹具生效：%d/%d 条命令带 %s" % (marked, total, FIXTURE_MARK))
+
         count = panel.locator("#cf-admin-count")
         assert count.text_content().strip() == "已选 0/%d" % total, "默认不该预勾选"
 
@@ -237,13 +311,20 @@ def main():
         assert btn.is_disabled(), "清空后执行按钮必须禁用"
 
         # 命令展开 / 收起：默认单行省略，展开后完整可见。
+        # 1360 视口下侧栏占 262px，命令区约 762px，夹具命令能整行放下；
+        # 820 才是「必须省略」的真实场景，所以这一段固定用 820 断言。
+        page.set_viewport_size({"width": 820, "height": 900})
+        page.wait_for_timeout(250)
         cmd = panel.locator(".cf-admin-cmd").first
         row = panel.locator(".cf-admin-row").first
-        assert cmd.evaluate("e => e.scrollWidth > e.clientWidth"), "长命令默认应单行省略"
+        assert FIXTURE_MARK in cmd.text_content(), "展开断言用的是真实命令，不是夹具"
+        assert cmd.evaluate("e => e.scrollWidth > e.clientWidth + 1"), "820 下长命令应单行省略"
+        page.screenshot(path=os.path.join(OUT, "decisions-820-ellipsis.png"), full_page=False)
         cmd.click()
         assert "is-open" in (row.get_attribute("class") or ""), "点击命令后该行未展开"
         assert cmd.evaluate("e => e.scrollWidth <= e.clientWidth + 1"), "展开后命令仍被截断"
         assert cmd.get_attribute("title"), "命令缺少 title 兜底"
+        page.screenshot(path=os.path.join(OUT, "decisions-820-expanded.png"), full_page=False)
         cmd.click()
         assert "is-open" not in (row.get_attribute("class") or ""), "再次点击未收起"
 
@@ -267,6 +348,7 @@ def main():
         real.goto(BASE)
         real.wait_for_load_state("networkidle")
         real.click("#tab-restore")
+        real.fill("#plan-config", CONFIG)
         real.click("#btn-plan")
         real.wait_for_selector("#confirm-panel", timeout=180000)
         real.wait_for_timeout(300)
@@ -282,17 +364,18 @@ def main():
         # 视口要比面板矮，否则 320px 列表上限会让面板整体装得下，sticky 无从判定。
         sticky = browser.new_page(viewport={"width": 1440, "height": 600})
         sticky.on("pageerror", lambda e: errors.append("pageerror(sticky): " + str(e)))
-        expand_plan(sticky)
+        sticky_problems = expand_plan(sticky)
         sticky.goto(BASE)
         sticky.wait_for_load_state("networkidle")
         sticky.click("#tab-restore")
+        sticky.fill("#plan-config", CONFIG)
         sticky.click("#btn-plan")
-        sticky.wait_for_function(
-            "n => document.querySelectorAll('.cf-admin-check').length === n",
-            arg=LONG_ADMIN_COUNT,
-            timeout=180000,
-        )
+        wait_fixture(sticky, problems=sticky_problems)
         sticky.wait_for_timeout(300)
+        assert not sticky_problems, "sticky 页夹具注入失败: %s" % sticky_problems
+        assert sticky.locator(".cf-admin-cmd").first.evaluate(
+            "e => (e.textContent + ' ' + (e.title || '')).includes('%s')" % FIXTURE_MARK
+        ), "sticky 页用的不是夹具计划"
         foot = sticky.locator("#confirm-panel .cf-foot")
         assert foot.evaluate("e => getComputedStyle(e).position") == "sticky", ".cf-foot 未生效 sticky"
         sticky.evaluate(
