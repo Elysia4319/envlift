@@ -143,6 +143,56 @@ func TestDecisionInstallDirControls(t *testing.T) {
 	}
 }
 
+// 二次确认面板：管理员行必须是显式块级结构，不能再复用 label.field。
+// 复用 label.field 时 inline-flex 会让 60 行按内容宽度并排，列表变成两列瀑布。
+func TestConfirmAdminRowsAreBlockRows(t *testing.T) {
+	js := staticFiles(t)["app.js"]
+	css := staticFiles(t)["app.css"]
+	for _, want := range []string{
+		`<div class="cf-admin-row">`,
+		`<label class="cf-admin-pick">`,
+		`<span class="cf-admin-name"`,
+		`<code class="cf-admin-cmd"`,
+		`id="cf-admin-count"`,
+		`id="cf-admin-all"`,
+		`id="cf-admin-none"`,
+		`class="cf-mode-opt"`,
+		`class="cf-foot"`,
+	} {
+		if !strings.Contains(js, want) {
+			t.Errorf("app.js 缺少二次确认面板结构: %q", want)
+		}
+	}
+	if strings.Contains(js, `class="field cf-admin-row"`) {
+		t.Error("管理员行不能再复用 label.field")
+	}
+	for _, want := range []string{
+		".cf-admin-card .cf-admin-row {",
+		"display: flex; align-items: center; gap: 12px;",
+		"max-height: 320px; overflow-y: auto;",
+		"text-overflow: ellipsis;",
+		".cf-foot {",
+		"position: sticky; bottom: 0;",
+		// .section 的 overflow:hidden 会让 sticky 失效；确认面板必须放开裁剪。
+		".cf-panel { overflow: visible; }",
+	} {
+		if !strings.Contains(css, want) {
+			t.Errorf("app.css 缺少二次确认布局规则: %q", want)
+		}
+	}
+	if strings.Contains(css, ":has(input:checked)") {
+		t.Error("选中态不应依赖 :has()，改用 JS 切换的 .is-checked")
+	}
+	for _, want := range []string{
+		"opt.classList.toggle('is-checked'",
+		"全选后仍需点击「执行还原」",
+	} {
+		if !strings.Contains(js, want) {
+			t.Errorf("app.js 缺少二次确认交互约定: %q", want)
+		}
+	}
+}
+
 func TestEmbedAssetsServedWithCorrectType(t *testing.T) {
 	s := newTestServer(t)
 	cases := []struct{ path, wantPrefix string }{

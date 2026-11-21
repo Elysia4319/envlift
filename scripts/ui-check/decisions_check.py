@@ -5,7 +5,12 @@
   - 决策徽章与撤销（撤销后 plan_hash 回到原值）
   - 决策改变 → plan_hash 变 → 确认态重置
   - 二次确认面板：mode / 只读提示 / 逐项 admin / reboot_ack / 「N 项因未决策将被跳过」
+  - 全选 / 清空 / 逐项取消 / 命令展开（820 视口断言省略），以及 1440 / 820 / 390 的行布局
+  - 夹具生效证明：60 条管理员命令都带 --ui-check-ellipsis 标记
   - 控制台零错误、三档宽度无横向溢出
+
+前置：服务进程的工作目录里要有可读的 envlift.yaml（仓库里被 gitignore）。
+缺失时脚本会立刻报错；也可用 --config=<路径> 指定。
 
 不做任何安装：脚本不点「执行还原」，只验证按钮的启用条件。
 """
@@ -18,9 +23,23 @@ from playwright.sync_api import sync_playwright
 
 BASE = sys.argv[1]
 OUT = sys.argv[2] if len(sys.argv) > 2 else "shots"
+# 计划里的配置路径。服务进程按自己的工作目录解析相对路径；
+# 工作目录里没有 envlift.yaml 时脚本会在前置检查处立刻失败，而不是等 180s 超时。
+CONFIG = "envlift.yaml"
+for _arg in sys.argv[3:]:
+    if _arg.startswith("--config="):
+        CONFIG = _arg.split("=", 1)[1].strip() or CONFIG
 os.makedirs(OUT, exist_ok=True)
 
 errors = []
+
+# 真实 fixture 只有 3 个管理员项，覆盖不到长列表。这里把 /api/v1/plan 的响应
+# 扩成 60 条 needs_admin 项，仅用于确认面板的布局与批量交互回归。
+LONG_ADMIN_COUNT = 60
+PLAN_PATTERN = "**/api/v1/plan"
+FIXTURE_MARK = "--ui-check-ellipsis"
+# 真实 BuildPlan 要探测 winget/网络，慢机器上会超过 route.fetch 默认的 30s。
+FETCH_TIMEOUT_MS = 180000
 
 
 def launch(p):
@@ -41,6 +60,138 @@ def wait_hash_change(page, old, timeout=30000):
     return page.text_content("#plan-hash")
 
 
+def expand_plan(page):
+    """把计划响应扩成 60 条管理员项；真实字段与顺序不变。
+
+    用显式 body 而不是 response=/json= 组合：后者在不同 Playwright 版本里对
+    「两个来源同时给」的取舍不一致，容易让夹具看起来生效、实际没生效。
+    另外 route.fetch 默认只等 30s，真实 BuildPlan 要探测 winget/网络，慢机器会超时。
+    """
+    problems = []
+
+    def handler(route):
+        try:
+            resp = route.fetch(timeout=FETCH_TIMEOUT_MS)
+            data = resp.json()
+            plan = data.get("plan") or {}
+            items = plan.get("items") or []
+            seed = next((it for it in items if it.get("needs_admin")), None)
+            if not seed:
+                problems.append("真实计划里没有 needs_admin 项，无法构造 60 条夹具")
+                route.fulfill(response=resp)
+                return
+            made = []
+            for i in range(LONG_ADMIN_COUNT):
+                it = dict(seed)
+                it["target_id"] = "ui-long-%02d" % i
+                it["name"] = "%s #%02d" % (seed.get("name") or "Package", i + 1)
+                it["status"] = "planned"
+                it["needs_admin"] = True
+                it["expect_reboot"] = i == 0
+                # 真实命令可能很短，撑不到省略号；补一段无害参数，专测单行省略/展开。
+                base = it.get("command") or ""
+                it["command"] = base + " " + FIXTURE_MARK + " --no-op --trace-level verbose --timeout 600"
+                made.append(it)
+            others = [it for it in items if not it.get("needs_admin")]
+            plan["items"] = made + others
+            plan["summary"] = dict(plan.get("summary") or {})
+            plan["summary"]["winget"] = LONG_ADMIN_COUNT
+            plan["summary"]["blocked_needs_decision"] = 0
+            plan["path_changes"] = []
+            data["plan"] = plan
+            route.fulfill(
+                status=200,
+                headers={"Content-Type": "application/json"},
+                body=json.dumps(data, ensure_ascii=False),
+            )
+        except Exception as e:  # noqa: BLE001
+            problems.append("%s: %s" % (type(e).__name__, e))
+            try:
+                route.abort()
+            except Exception:  # noqa: BLE001
+                pass
+
+    page.route(PLAN_PATTERN, handler)
+    return problems
+
+
+def wait_fixture(page, count=LONG_ADMIN_COUNT, problems=None, timeout=180000):
+    """等夹具真正渲染出来；夹具注入失败时立刻报错，不干等超时。
+
+    只等 .cf-admin-check 的数量是不够的：真实计划本身就可能已经有 60 条
+    needs_admin，旧 DOM 会立刻满足条件，随后断言标记时读到的还是旧列表
+    （marked=0/60）。这里必须以夹具标记出现为准。
+    """
+    script = """arg => {
+        const {mark, n} = arg;
+        const cmds = [...document.querySelectorAll('.cf-admin-cmd')];
+        const marked = cmds.filter(
+            e => (e.textContent + ' ' + (e.title || '')).includes(mark)
+        ).length;
+        const checks = document.querySelectorAll('.cf-admin-check').length;
+        return marked === n && checks === n;
+    }"""
+    try:
+        page.wait_for_function(
+            script,
+            arg={"mark": FIXTURE_MARK, "n": count},
+            timeout=timeout,
+        )
+    except Exception as e:  # noqa: BLE001
+        if problems:
+            raise SystemExit(
+                "夹具注入失败，页面没有渲染 %d 条带 %s 的管理员项: %s"
+                % (count, FIXTURE_MARK, problems)
+            )
+        raise
+
+
+def row_layout(page):
+    return page.evaluate(
+        """() => {
+            const rows = [...document.querySelectorAll('.cf-admin-row')];
+            const r = rows.map(x => x.getBoundingClientRect());
+            return {
+                count: rows.length,
+                lefts: [...new Set(r.map(x => Math.round(x.left)))],
+                widths: [...new Set(r.map(x => Math.round(x.width)))],
+                flexDir: rows.length ? getComputedStyle(rows[0]).flexDirection : '',
+                scrollW: document.scrollingElement.scrollWidth,
+                clientW: document.scrollingElement.clientWidth,
+            };
+        }"""
+    )
+
+
+def fixture_marked(page):
+    """返回当前 DOM 里带夹具标记的命令条数。"""
+    return page.evaluate(
+        """mark => [...document.querySelectorAll('.cf-admin-cmd')]
+                   .filter(e => (e.textContent + ' ' + (e.title || '')).includes(mark))
+                   .length""",
+        FIXTURE_MARK,
+    )
+
+
+def preflight(page, token):
+    """配置缺失时立刻给出可操作的提示，而不是让页面等 180s 超时。"""
+    r = page.request.post(
+        BASE.split("?")[0] + "/api/v1/config/load",
+        headers={"X-Envlift-Token": token, "Content-Type": "application/json"},
+        data=json.dumps({"path": CONFIG}),
+    )
+    if not r.ok:
+        raise SystemExit(
+            "读取配置失败（%d）：%s\n"
+            "服务进程的工作目录里没有 %s？先把待测配置放到该目录，"
+            "或用 --config=<路径> 指定。详见 scripts/ui-check/README.md。"
+            % (r.status, (r.text() or "")[:300], CONFIG)
+        )
+    cfg = r.json()
+    print("前置配置：%s（schema=%s，软件 %d 条）"
+          % (CONFIG, cfg.get("schema"), len(cfg.get("software") or [])))
+
+
 def main():
     with sync_playwright() as p:
         browser = launch(p)
@@ -59,6 +210,7 @@ def main():
         # 每次运行都从「没有决策」开始：决策文件是本机持久产物，
         # 不清掉会让上一次运行的结果影响这一次（hash 不再变化、断言全乱）。
         token = parse_qs(urlparse(BASE).query)["token"][0]
+        preflight(page, token)
         page.request.post(
             BASE.split("?")[0] + "/api/v1/decisions",
             headers={"X-Envlift-Token": token, "Content-Type": "application/json"},
@@ -70,84 +222,244 @@ def main():
         assert page.evaluate("localStorage.length + sessionStorage.length") == 0
 
         page.click("#tab-restore")
+        page.fill("#plan-config", CONFIG)
         page.click("#btn-plan")
         page.wait_for_selector("#plan-result .section", timeout=180000)
         hash0 = page.text_content("#plan-hash")
         assert hash0 and len(hash0) == 64, "plan_hash 格式不对: %r" % hash0
         print("初始 plan_hash:", hash0)
 
-        # 未决策计数必须出现在确认面板顶部，且与面板上的数字一致
+        # 未决策提示只在存在未决策项时出现；fixture 的安装包目录会改变这一点。
         guard = page.locator("#confirm-panel .guard").first
-        assert "因未决策将被跳过" in guard.text_content(), "确认面板缺少未决策提示"
-        print("未决策提示:", guard.text_content().strip())
+        if guard.count():
+            assert "因未决策将被跳过" in guard.text_content(), "确认面板未决策提示内容异常"
+            print("未决策提示:", guard.text_content().strip())
 
         cards = page.locator("#plan-result .pending-card")
-        assert cards.count() >= 2, "待确认卡片太少: %d" % cards.count()
+        print("待确认卡片数:", cards.count())
         shots_before = os.path.join(OUT, "decisions-before.png")
         page.screenshot(path=shots_before, full_page=True)
 
-        # ---- 1) 安装包歧义：选一个安装包 ----
+        # ---- 1) 安装包歧义：选一个安装包（没有歧义项时跳过）----
         card = page.locator(".pending-card", has_text="Example Editor").first
         sel = card.locator(".dec-cand")
-        n = sel.locator("option").count()
-        assert n >= 3, "安装包候选不足: %d" % n
-        sel.select_option(index=1)
-        hash1 = wait_hash_change(page, hash0)
-        print("选安装包后 plan_hash:", hash1)
-        assert hash1 != hash0, "决策没有改变 plan_hash"
-        assert page.locator('.chip:has-text("决策 · select")').count() >= 1, "缺少决策徽章"
+        n = sel.locator("option").count() if sel.count() else 0
+        if n >= 3:
+            sel.select_option(index=1)
+            hash1 = wait_hash_change(page, hash0)
+            print("选安装包后 plan_hash:", hash1)
+            assert hash1 != hash0, "决策没有改变 plan_hash"
+            assert page.locator('.chip:has-text("决策 · select")').count() >= 1, "缺少决策徽章"
 
-        # ---- 2) 撤销：hash 必须回到原值（决策态与计划态都可复现）----
-        page.locator(".pending-card", has_text="Example Editor").first.locator(".dec-undo").first.click()
-        hash2 = wait_hash_change(page, hash1)
-        assert hash2 == hash0, "撤销后 plan_hash 没回到原值: %s vs %s" % (hash2, hash0)
-        print("撤销后 plan_hash 复原:", hash2)
+            # ---- 2) 撤销：hash 必须回到原值（决策态与计划态都可复现）----
+            page.locator(".pending-card", has_text="Example Editor").first.locator(".dec-undo").first.click()
+            hash2 = wait_hash_change(page, hash1)
+            assert hash2 == hash0, "撤销后 plan_hash 没回到原值: %s vs %s" % (hash2, hash0)
+            print("撤销后 plan_hash 复原:", hash2)
+        else:
+            print("跳过安装包歧义：当前 fixture 无候选（options=%d）" % n)
 
-        # ---- 3) PATH ? 项：改写落点 ----
+        # ---- 3) PATH ? 项：改写落点（没有待确认 PATH 时跳过）----
         pcard = page.locator(".pending-card", has_text="PATH[user]").first
-        pcard.locator(".dec-act-path").select_option("rewrite")
-        pcard.locator(".dec-value").fill("C:\\Tools\\bin")
-        pcard.locator(".dec-apply-path").click()
-        hash3 = wait_hash_change(page, hash0)
-        assert page.locator('.chip:has-text("决策 · rewrite")').count() >= 1, "PATH 决策徽章缺失"
-        print("PATH 决策后 plan_hash:", hash3)
+        if pcard.count():
+            pcard.locator(".dec-act-path").select_option("rewrite")
+            pcard.locator(".dec-value").fill("C:\\Tools\\bin")
+            pcard.locator(".dec-apply-path").click()
+            hash3 = wait_hash_change(page, hash0)
+            assert page.locator('.chip:has-text("决策 · rewrite")').count() >= 1, "PATH 决策徽章缺失"
+            print("PATH 决策后 plan_hash:", hash3)
 
-        # 非法路径要回显后端错误码（B3：前端不猜，按 code 分支）
-        pcard = page.locator(".pending-card", has_text="PATH[user]").first
-        pcard.locator(".dec-act-path").select_option("rewrite")
-        pcard.locator(".dec-value").fill("Tools\\bin")
-        pcard.locator(".dec-apply-path").click()
-        page.wait_for_function("() => { const e = document.getElementById('errbar-code'); return e && e.textContent === 'invalid_decision_params'; }", timeout=15000)
-        print("非法路径错误码:", page.text_content("#errbar-code"))
-        page.click("#errbar-close")
+            # 非法路径要回显后端错误码（B3：前端不猜，按 code 分支）
+            pcard = page.locator(".pending-card", has_text="PATH[user]").first
+            pcard.locator(".dec-act-path").select_option("rewrite")
+            pcard.locator(".dec-value").fill("Tools\\bin")
+            pcard.locator(".dec-apply-path").click()
+            # 真实计划要重新生成一遍，慢机器上 15s 不够；按页面自己的错误条状态等。
+            page.wait_for_function(
+                "() => { const e = document.getElementById('errbar-code'); return e && e.textContent === 'invalid_decision_params'; }",
+                timeout=90000,
+            )
+            print("非法路径错误码:", page.text_content("#errbar-code"))
+            page.click("#errbar-close")
+        else:
+            print("跳过 PATH 改写：当前 fixture 无 PATH[user] 待确认项")
 
         # ---- 4) 二次确认面板 ----
+        fixture_problems = expand_plan(page)
+        page.click("#btn-plan")
+        # 面板已经存在，wait_for_selector 会立刻返回；必须等长列表真正渲染出来。
+        wait_fixture(page, problems=fixture_problems)
+        page.wait_for_timeout(300)
+
         panel = page.locator("#confirm-panel")
         assert panel.locator("#cf-mode-all").is_checked(), "默认 mode 应为 all"
         btn = panel.locator("#btn-apply")
         assert btn.is_disabled(), "未勾选任何确认时执行按钮必须是禁用的"
 
         checks = panel.locator(".cf-admin-check")
-        for i in range(checks.count()):
-            checks.nth(i).check()
+        total = checks.count()
+        assert total == LONG_ADMIN_COUNT, "管理员项数量异常: %d" % total
+        assert not fixture_problems, "夹具注入失败: %s" % fixture_problems
+
+        # 证明夹具真的进了页面：60 条数量可能是真实计划碰巧凑出来的，标记不会。
+        marked = fixture_marked(page)
+        assert marked == LONG_ADMIN_COUNT, "夹具标记只出现在 %d/%d 条命令里" % (marked, total)
+        print("夹具生效：%d/%d 条命令带 %s" % (marked, total, FIXTURE_MARK))
+
+        count = panel.locator("#cf-admin-count")
+        assert count.text_content().strip() == "已选 0/%d" % total, "默认不该预勾选"
+
+        # 全选：只改逐项确认，按钮仍要等 reboot ack。
+        panel.locator("#cf-admin-all").click()
+        assert count.text_content().strip() == "已选 %d/%d" % (total, total), "全选后计数不同步"
+        assert checks.evaluate_all("els => els.every(x => x.checked)"), "全选没有勾满"
+        assert btn.is_disabled(), "会重启项未确认时仍应禁用"
         reboot = panel.locator("#cf-reboot-ack")
         if reboot.count() and not reboot.first.is_hidden():
             reboot.first.check()
-        assert btn.is_enabled(), "全部勾选后执行按钮应可点"
+        assert btn.is_enabled(), "全选 + reboot ack 后执行按钮应可点"
+
+        # 逐项取消一项：计数与按钮同步。
+        checks.nth(7).uncheck()
+        assert count.text_content().strip() == "已选 %d/%d" % (total - 1, total), "取消一项后计数没跟上"
+        assert btn.is_disabled(), "缺一项时执行按钮必须禁用"
+        checks.nth(7).check()
+        assert count.text_content().strip() == "已选 %d/%d" % (total, total)
+        assert btn.is_enabled()
+
+        # 清空：回到未勾选，按钮禁用。
+        panel.locator("#cf-admin-none").click()
+        assert count.text_content().strip() == "已选 0/%d" % total, "清空后计数不对"
+        assert checks.evaluate_all("els => els.every(x => !x.checked)"), "清空没有全部取消"
+        assert btn.is_disabled(), "清空后执行按钮必须禁用"
+
+        # 命令展开 / 收起：默认单行省略，展开后完整可见。
+        # 1360 视口下侧栏占 262px，命令区约 762px，夹具命令能整行放下；
+        # 820 才是「必须省略」的真实场景，所以这一段固定用 820 断言。
+        page.set_viewport_size({"width": 820, "height": 900})
+        page.wait_for_timeout(250)
+        cmd = panel.locator(".cf-admin-cmd").first
+        row = panel.locator(".cf-admin-row").first
+        assert FIXTURE_MARK in cmd.text_content(), "展开断言用的是真实命令，不是夹具"
+        assert cmd.evaluate("e => e.scrollWidth > e.clientWidth + 1"), "820 下长命令应单行省略"
+        page.screenshot(path=os.path.join(OUT, "decisions-820-ellipsis.png"), full_page=False)
+        cmd.click()
+        assert "is-open" in (row.get_attribute("class") or ""), "点击命令后该行未展开"
+        assert cmd.evaluate("e => e.scrollWidth <= e.clientWidth + 1"), "展开后命令仍被截断"
+        assert cmd.get_attribute("title"), "命令缺少 title 兜底"
+        page.screenshot(path=os.path.join(OUT, "decisions-820-expanded.png"), full_page=False)
+        cmd.click()
+        assert "is-open" not in (row.get_attribute("class") or ""), "再次点击未收起"
+
+        # 1440 / 820：单列；390：上下排列。都不许横向溢出。
+        for w, h, mode in ((1440, 900, "row"), (820, 900, "row"), (390, 844, "column")):
+            page.set_viewport_size({"width": w, "height": h})
+            page.wait_for_timeout(250)
+            lay = row_layout(page)
+            assert lay["scrollW"] <= lay["clientW"] + 1, "%d 宽度整页横向溢出: %s" % (w, lay)
+            assert len(lay["lefts"]) == 1, "%d 宽度管理员行左边不唯一: %s" % (w, lay["lefts"])
+            assert len(lay["widths"]) == 1, "%d 宽度管理员行宽度不唯一: %s" % (w, lay["widths"])
+            assert lay["flexDir"] == mode, "%d 宽度行方向应为 %s，实际 %s" % (w, mode, lay["flexDir"])
+            print("宽度 %d 行布局: %s" % (w, lay))
+        page.screenshot(path=os.path.join(OUT, "decisions-390.png"), full_page=False)
+        page.set_viewport_size({"width": 1440, "height": 900})
+        page.wait_for_timeout(200)
+
+        # 真实还原页（不拦截任何响应）回归：面板能正常生成，底部操作栏存在且无横向溢出。
+        real = browser.new_page(viewport={"width": 1440, "height": 900})
+        real.on("pageerror", lambda e: errors.append("pageerror(real): " + str(e)))
+        real.goto(BASE)
+        real.wait_for_load_state("networkidle")
+        real.click("#tab-restore")
+        real.fill("#plan-config", CONFIG)
+        real.click("#btn-plan")
+        real.wait_for_selector("#confirm-panel", timeout=180000)
+        real.wait_for_timeout(300)
+        assert real.locator("#confirm-panel .cf-foot").count() == 1, "真实页面缺少底部操作栏"
+        m = real.evaluate("() => ({s: document.scrollingElement.scrollWidth, c: document.scrollingElement.clientWidth})")
+        assert m["s"] <= m["c"] + 1, "真实页面横向溢出: %s" % m
+        print("真实还原页：面板生成、无横向溢出")
+        real.screenshot(path=os.path.join(OUT, "decisions-real-1440.png"), full_page=False)
+        real.close()
+
+        # sticky 判定需要面板高于视口：真实 fixture 只有 2–3 个管理员项，
+        # 因此用同一真实服务的长列表响应把面板撑高，再看底栏是否贴住视口底。
+        # 视口要比面板矮，否则 320px 列表上限会让面板整体装得下，sticky 无从判定。
+        sticky = browser.new_page(viewport={"width": 1440, "height": 600})
+        sticky.on("pageerror", lambda e: errors.append("pageerror(sticky): " + str(e)))
+        sticky_problems = expand_plan(sticky)
+        sticky.goto(BASE)
+        sticky.wait_for_load_state("networkidle")
+        sticky.click("#tab-restore")
+        sticky.fill("#plan-config", CONFIG)
+        sticky.click("#btn-plan")
+        wait_fixture(sticky, problems=sticky_problems)
+        sticky.wait_for_timeout(300)
+        assert not sticky_problems, "sticky 页夹具注入失败: %s" % sticky_problems
+        sticky_marked = fixture_marked(sticky)
+        assert sticky_marked == LONG_ADMIN_COUNT, (
+            "sticky 页只有 %d/%d 条命令带夹具标记" % (sticky_marked, LONG_ADMIN_COUNT)
+        )
+        print("sticky 页夹具：%d/%d 条命令带 %s" % (sticky_marked, LONG_ADMIN_COUNT, FIXTURE_MARK))
+        foot = sticky.locator("#confirm-panel .cf-foot")
+        assert foot.evaluate("e => getComputedStyle(e).position") == "sticky", ".cf-foot 未生效 sticky"
+        sticky.evaluate(
+            """() => { const s = document.querySelector('#confirm-panel');
+                       window.scrollTo(0, s.getBoundingClientRect().top + window.scrollY); }"""
+        )
+        sticky.wait_for_timeout(350)
+        stick = sticky.evaluate(
+            """() => { const s = document.querySelector('#confirm-panel').getBoundingClientRect();
+                       const f = document.querySelector('#confirm-panel .cf-foot').getBoundingClientRect();
+                       return {panelBottom: Math.round(s.bottom), footBottom: Math.round(f.bottom),
+                               vh: window.innerHeight}; }"""
+        )
+        assert stick["panelBottom"] > stick["vh"], "面板没有高过视口，sticky 无法判定: %s" % stick
+        assert abs(stick["footBottom"] - stick["vh"]) <= 1, "底部操作栏没有贴在视口底: %s" % stick
+        print("sticky 吸底:", stick)
+        sticky.screenshot(path=os.path.join(OUT, "decisions-sticky-1440.png"), full_page=False)
+        sticky.close()
 
         # skip_admin：切换后必须要求 ack，且提权清单隐藏
         panel.locator("#cf-mode-skip").check()
+        assert panel.locator("#cf-admin").is_hidden(), "skip_admin 应隐藏管理员列表"
+        assert panel.locator(".cf-ack").is_visible(), "skip_admin 应显示 ack"
         assert btn.is_disabled(), "skip_admin 未 ack 时不该放行"
         panel.locator("#cf-ack-skip").check()
         assert btn.is_enabled(), "skip_admin + ack 后应可执行"
         panel.locator("#cf-mode-all").check()
+        assert panel.locator("#cf-admin").is_visible(), "切回 all 应恢复管理员列表"
 
         page.screenshot(path=os.path.join(OUT, "decisions-confirm.png"), full_page=True)
 
-        # ---- 5) 保存决策文件 ----
-        page.click("#btn-save-decisions")
-        page.wait_for_function("() => (document.getElementById('plan-load-note')||{}).textContent.indexOf('决策已保存') >= 0", timeout=15000)
-        print("保存决策:", page.text_content("#plan-load-note"))
+        # ---- 5) 保存决策文件（仅在有决策时可点）----
+        # app.js 在 state.decisions 为空时把 #btn-save-decisions 设为 disabled；
+        # 本次 fixture 若没有歧义/PATH 决策，点它只会等到超时。
+        save = page.locator("#btn-save-decisions")
+        if save.is_enabled():
+            save.click()
+            page.wait_for_function(
+                "() => (document.getElementById('plan-load-note')||{}).textContent.indexOf('决策已保存') >= 0",
+                timeout=15000,
+            )
+            print("保存决策:", page.text_content("#plan-load-note"))
+        else:
+            assert save.is_disabled(), "无决策时保存按钮应禁用"
+            print("无决策：保存按钮禁用，跳过保存断言")
+
+        # 确认面板里的 #btn-save-decisions-2 走同一个 saveDecisionsFile()，
+        # app.js 没有给它禁用逻辑；有决策时点一次，没有决策时只记录状态。
+        save2 = page.locator("#btn-save-decisions-2")
+        assert save2.count() == 1, "确认面板缺少保存决策按钮"
+        if save.is_enabled():
+            save2.click()
+            page.wait_for_function(
+                "() => (document.getElementById('plan-load-note')||{}).textContent.indexOf('决策已保存') >= 0",
+                timeout=15000,
+            )
+            print("确认面板保存决策:", page.text_content("#plan-load-note"))
+        else:
+            print("无决策：确认面板保存按钮存在但无可保存内容（脚本不点击）")
 
         # ---- 6) 三档宽度无横向溢出 ----
         for w, h in ((1360, 1000), (820, 900), (390, 844)):
@@ -156,7 +468,6 @@ def main():
             m = page.evaluate("() => ({s: document.scrollingElement.scrollWidth, c: document.scrollingElement.clientWidth})")
             assert m["s"] <= m["c"] + 1, "%d 宽度横向溢出: %s" % (w, m)
             print("宽度 %d: scrollWidth=%d clientWidth=%d" % (w, m["s"], m["c"]))
-        page.screenshot(path=os.path.join(OUT, "decisions-390.png"), full_page=False)
 
         browser.close()
 

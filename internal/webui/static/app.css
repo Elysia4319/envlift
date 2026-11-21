@@ -635,14 +635,149 @@ dialog pre {
 .dec-ctl .field { gap: 6px; }
 .dec-ctl select { min-width: 16ch; max-width: 100%; }
 .dec-value { min-width: 28ch; max-width: 100%; }
-.cf-grid { display: flex; gap: 18px; flex-wrap: wrap; }
-.cf-ack { border-left: 3px solid var(--brass); padding-left: 10px; }
-.cf-admin-row {
-  display: flex; align-items: flex-start; gap: 8px;
-  padding: 7px 0; border-bottom: 1px solid var(--rule-soft);
+
+/* .section 默认 overflow:hidden，会让内部 sticky 失效（吸不到视口）。
+   确认面板单独放开裁剪，底部操作栏才能真正贴底。 */
+.cf-panel { overflow: visible; }
+.cf-body { display: flex; flex-direction: column; gap: 14px; }
+.cf-body .tally { margin: 0; }
+.cf-guard { margin: 0; }
+
+/* PATH 备份：一行提示，完整说明放 title，避免在面板顶部铺两行大段文字。 */
+.cf-path-hint {
+  margin: 0; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.cf-admin-row:last-child { border-bottom: 0; }
-.cf-admin-row code { font-size: 11px; word-break: break-all; }
+.cf-path-hint code { font-size: 11px; }
+
+/* 执行范围：一行分段控件，选中态靠底色与内描边，而不是只靠小圆点。 */
+.cf-mode {
+  display: flex; flex-wrap: wrap; gap: 2px;
+  padding: 3px;
+  background: rgba(18, 24, 28, 0.045);
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--radius);
+  align-self: flex-start;
+  max-width: 100%;
+}
+.cf-mode-opt {
+  display: flex; align-items: baseline; gap: 7px;
+  padding: 8px 14px; min-width: 0;
+  border: 1px solid transparent; border-radius: 2px;
+  cursor: pointer; color: var(--text-soft);
+}
+.cf-mode-opt:hover { background: rgba(18, 24, 28, 0.04); color: var(--ink); }
+.cf-mode-opt.is-checked {
+  background: var(--surface);
+  border-color: var(--rule);
+  box-shadow: 0 1px 2px rgba(18, 24, 28, 0.06);
+  color: var(--ink);
+}
+.cf-mode-opt input:focus-visible { outline: 2px solid var(--mint-deep); outline-offset: 1px; }
+.cf-mode-opt input { margin: 0; }
+.cf-mode-title { font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.cf-mode-note { font: 10px/1.4 var(--font-data); color: var(--muted); white-space: nowrap; }
+
+.cf-ack {
+  padding: 10px 12px;
+  background: var(--brass-bg);
+  border: 1px solid rgba(154, 107, 31, 0.28);
+  border-left: 3px solid var(--brass);
+  border-radius: var(--radius);
+}
+.cf-ack-row {
+  display: flex; align-items: flex-start; gap: 9px;
+  font-size: 12.5px; color: #654712; cursor: pointer;
+}
+.cf-ack-row input { margin: 3px 0 0; flex: 0 0 auto; }
+
+/* 管理员确认卡：标题行固定，列表单列滚动。 */
+.cf-admin-card {
+  border: 1px solid var(--rule); border-radius: var(--radius);
+  background: var(--surface); overflow: hidden;
+}
+.cf-admin-head {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 9px 12px;
+  background: rgba(18, 24, 28, 0.022);
+  border-bottom: 1px solid var(--rule-soft);
+}
+.cf-admin-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.cf-admin-title strong { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.cf-admin-count {
+  font: 500 10.5px/1 var(--font-data);
+  color: var(--muted); letter-spacing: .03em; white-space: nowrap;
+}
+.cf-admin-tools { display: flex; gap: 6px; margin-left: auto; }
+
+.cf-admin-list {
+  max-height: 320px; overflow-y: auto; overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+.cf-admin-empty { padding: 12px; }
+
+/* 显式块级行：不复用 label.field，避免 inline-flex 把 60 行压成两列瀑布。 */
+.cf-admin-card .cf-admin-row {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; min-height: 42px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--rule-soft);
+}
+.cf-admin-card .cf-admin-row:last-child { border-bottom: 0; }
+.cf-admin-card .cf-admin-row:hover { background: rgba(18, 24, 28, 0.022); }
+.cf-admin-card .cf-admin-row.is-open { align-items: flex-start; }
+
+.cf-admin-pick {
+  flex: 0 1 clamp(15ch, 32%, 30ch);
+  display: flex; align-items: center; gap: 9px;
+  min-width: 0; cursor: pointer;
+}
+.cf-admin-pick input { flex: 0 0 auto; margin: 0; }
+.cf-admin-name {
+  min-width: 0;
+  font-size: 12.5px; font-weight: 600; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.cf-admin-cmd {
+  flex: 1 1 auto; min-width: 0;
+  font: 11px/1.5 var(--font-data); color: var(--text-soft);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  cursor: pointer;
+}
+.cf-admin-cmd:hover { color: var(--ink); }
+.cf-admin-row.is-open .cf-admin-cmd {
+  white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word;
+  color: var(--ink);
+}
+
+/* 重启确认单独成行，不混进管理员列表。 */
+.cf-reboot {
+  padding: 10px 12px;
+  background: var(--brass-bg);
+  border: 1px solid rgba(154, 107, 31, 0.28);
+  border-left: 3px solid var(--brass);
+  border-radius: var(--radius);
+}
+.cf-reboot-row {
+  display: flex; align-items: flex-start; gap: 9px;
+  font-size: 12.5px; color: #654712; cursor: pointer;
+}
+.cf-reboot-row input { margin: 3px 0 0; flex: 0 0 auto; }
+.cf-reboot-row strong { font-weight: 600; }
+
+/* 底部操作栏：长列表滚动时仍可见。 */
+.cf-foot {
+  position: sticky; bottom: 0; z-index: 2;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 0 -16px -16px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border-top: 1px solid var(--rule);
+  box-shadow: 0 -8px 16px -14px rgba(18, 24, 28, 0.5);
+}
+.cf-note { flex: 1 1 240px; min-width: 0; }
+
 #apply-run { margin-top: 14px; }
 #apply-run .log { height: 190px; }
 
@@ -689,6 +824,8 @@ dialog pre {
   .section-body { padding: 14px; }
   .section-head { padding: 11px 14px; }
   .section-foot { padding: 9px 14px; }
+  .cf-foot { margin: 0 -14px -14px; padding: 11px 14px; }
+  .cf-body .tally > div { flex-basis: 100px; padding: 8px 11px; }
 }
 
 /* ≤780：页头改为「编号行 + 标题行 + 说明行」，避免 560–820 之间标题被挤。 */
@@ -704,4 +841,14 @@ dialog pre {
   .lede { font-size: 12.5px; }
   .tab { padding: 7px 9px; gap: 6px; }
   .tab-icon { width: 17px; height: 17px; }
+  .cf-mode { align-self: stretch; flex-wrap: nowrap; }
+  .cf-mode-opt { flex: 1 1 0; justify-content: flex-start; padding: 8px 10px; }
+  .cf-mode-note { display: none; }
+  .cf-admin-card .cf-admin-row {
+    flex-direction: column; align-items: stretch; gap: 4px;
+    padding: 8px 12px;
+  }
+  .cf-admin-card .cf-admin-row.is-open { align-items: stretch; }
+  .cf-admin-pick, .cf-admin-cmd { flex: 0 0 auto; width: 100%; }
+  .cf-foot .btn { flex: 1 1 auto; justify-content: center; }
 }
